@@ -10,7 +10,7 @@
 typedef CGAL::Exact_predicates_inexact_constructions_kernel InexactKernel;
 typedef CGAL::Surface_mesh<InexactKernel::Point_3> InexactMesh;
 
-bool triangulate(std::vector<QVector3D> &vertices, const std::vector<std::vector<size_t>> &faces, std::vector<std::vector<size_t>> &triangles)
+bool triangulateWithoutKeepVertices(std::vector<QVector3D> &vertices, const std::vector<std::vector<size_t>> &faces, std::vector<std::vector<size_t>> &triangles)
 {
     auto cgalMesh = buildCgalMesh<InexactKernel>(vertices, faces);
     bool isSucceed = CGAL::Polygon_mesh_processing::triangulate_faces(*cgalMesh);

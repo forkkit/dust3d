@@ -770,7 +770,7 @@ MeshCombiner::Mesh *MeshGenerator::combinePartMesh(const QString &partIdString, 
     }
     if (partCache.previewTriangles.empty()) {
         partPreviewVertices = partCache.vertices;
-        triangulate(partPreviewVertices, partCache.faces, partCache.previewTriangles);
+        triangulateWithoutKeepVertices(partPreviewVertices, partCache.faces, partCache.previewTriangles);
 #ifdef IN_DEVELOPMENT
         {
             QFile file("/Users/jeremy/Desktop/dust3d_debug.obj");
