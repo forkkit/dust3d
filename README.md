@@ -1,6 +1,6 @@
 <a href="https://dust3d.org" target="_blank"><image src="https://dust3d.org/images/dust3d-logo-wide.png" width="94" height="30"></a>
 
-[![appveyor status](https://ci.appveyor.com/api/projects/status/github/huxingyi/dust3d?branch=master&svg=true)](https://ci.appveyor.com/project/huxingyi/dust3d) [![travis status](https://travis-ci.org/huxingyi/dust3d.svg?branch=master)](https://travis-ci.org/huxingyi/dust3d) [![readthedocs status](https://readthedocs.org/projects/dust3d/badge/?version=latest)](http://docs.dust3d.org/en/latest/?badge=latest) [![](https://img.shields.io/twitter/follow/jeremyhu2016.svg?label=%20%40follow&style=social)](https://twitter.com/jeremyhu2016) [![](https://img.shields.io/badge/mailing%20list%20-join-blue.svg)](https://www.freelists.org/list/dust3d) [![](https://img.shields.io/discourse/https/dust3d.discourse.group/status.svg)](https://dust3d.discourse.group/) [![](https://img.shields.io/github/downloads/huxingyi/dust3d/total.svg)](http://docs.dust3d.org/en/latest/install.html)
+[![appveyor status](https://ci.appveyor.com/api/projects/status/github/huxingyi/dust3d?branch=master&svg=true)](https://ci.appveyor.com/project/huxingyi/dust3d) [![travis status](https://travis-ci.org/huxingyi/dust3d.svg?branch=master)](https://travis-ci.org/huxingyi/dust3d) [![readthedocs status](https://readthedocs.org/projects/dust3d/badge/?version=latest)](https://docs.dust3d.org/en/latest/?badge=latest) [![](https://img.shields.io/twitter/follow/jeremyhu2016.svg?label=%20%40follow&style=social)](https://twitter.com/jeremyhu2016) [![](https://img.shields.io/badge/mailing%20list%20-join-blue.svg)](https://www.freelists.org/list/dust3d) [![](https://img.shields.io/discourse/https/dust3d.discourse.group/status.svg)](https://dust3d.discourse.group/) [![](https://img.shields.io/github/downloads/huxingyi/dust3d/total.svg)](https://docs.dust3d.org/en/latest/install.html)
 
 Overview
 ----------
@@ -9,8 +9,8 @@ Dust3D is a brand new 3D modeling software. It helps you create a 3D watertight 
 
 <a href="https://blogs.dust3d.org/2019/07/18/dust3d-awarded-epic-megagrants/"><img width="106" height="109" src="https://dust3d.org/images/EpicMegaGrants_Badge_Dark.png" /></a>  
 
-- [Download Dust3D Software](http://docs.dust3d.org/en/latest/install.html)  
-- [Quick Start](http://docs.dust3d.org)  
+- [Download Dust3D Software](https://docs.dust3d.org/en/latest/install.html)  
+- [Quick Start](https://docs.dust3d.org)  
 - __[Join Mailing List to get Updated](https://www.freelists.org/list/dust3d)__  
 
 Screenshots
@@ -27,6 +27,9 @@ External Links
 - [Бета-выпуск Dust3D, нового открытого пакета для создания 3D-моделей](https://www.opennet.ru/opennews/art.shtml?num=49694) **opennet.ru**  
 - [Dust3D - ユニークなモデリングフローが印象的な無料の3Dモデリングソフト！Win＆Mac＆Linux！オープンソース！](https://3dnchu.com/archives/dust3d/) **3dnchu.com**  
 - [Review: Free and easy 3d modeling with Dust3D](https://magazine.renderosity.com/article/5482/review-free-and-easy-3d-modeling-with-dust3d) **renderosity.com**  
+- [Get promising free low-poly 3D modeling tool Dust3D](http://www.cgchannel.com/2020/01/get-promising-free-low-poly-3d-modeling-tool-dust3d/) **cgchannel.com**  
+- [Dust3D, new free modeling tool](https://www.3dvf.com/dust3d-nouvel-outil-de-modelisation-gratuit/) **3dvf.com**  
+- [Epic MegaGrantsも受賞したオープンソースの無料3Dモデリングソフトウェア「Dust3D」](https://cginterest.com/2020/03/23/epic-megagrants%e3%82%92%e5%8f%97%e8%b3%9e%e3%81%97%e3%81%9f%e3%82%aa%e3%83%bc%e3%83%97%e3%83%b3%e3%82%bd%e3%83%bc%e3%82%b9%e3%81%ae%e7%84%a1%e6%96%993d%e3%83%a2%e3%83%87%e3%83%aa%e3%83%b3%e3%82%b0/) **cginterest.com**  
 
 External Media
 -------------
@@ -41,7 +44,7 @@ If you have done programming code changes, including the example code listed in 
 
 License
 -----------
-Dust3D software binaries and source code use MIT License, which means you can use it freely no matter for personal or for commercial purpose.
+Dust3D software source code use MIT license, however, some of the third party libraries are not MIT license compatible, such as CGAL. Which means you can use the released Dust3D software freely no matter for personal or for commercial purpose, and you can integrate the source code of Dust3D to your project as MIT licensed, but with the third party libraries on the specified license respectively.
 
 Acknowledgements
 -------------------

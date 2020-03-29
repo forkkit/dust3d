@@ -6,7 +6,7 @@
 #include <QPushButton>
 #include <QFileDialog>
 #include <QTabWidget>
-#include <QBuffer>
+#include <QtCore/qbuffer.h>
 #include <QMessageBox>
 #include <QTimer>
 #include <QMenuBar>
@@ -160,6 +160,10 @@ DocumentWindow::DocumentWindow() :
     selectButton->setToolTip(tr("Select node on canvas"));
     Theme::initAwesomeButton(selectButton);
     
+    QPushButton *markerButton = new QPushButton(QChar(fa::edit));
+    markerButton->setToolTip(tr("Marker pen"));
+    Theme::initAwesomeButton(markerButton);
+    
     QPushButton *paintButton = new QPushButton(QChar(fa::paintbrush));
     paintButton->setToolTip(tr("Paint brush"));
     Theme::initAwesomeButton(paintButton);
@@ -177,7 +181,7 @@ DocumentWindow::DocumentWindow() :
     Theme::initAwesomeButton(zoomOutButton);
     
     m_rotationButton = new QPushButton(QChar(fa::caretsquareoup));
-    m_rotationButton->setToolTip(tr("Toggle rotation"));
+    m_rotationButton->setToolTip(tr("Toggle viewport"));
     Theme::initAwesomeButton(m_rotationButton);
     updateRotationButtonState();
 
@@ -234,12 +238,17 @@ DocumentWindow::DocumentWindow() :
         regenerateButton->showSpinner(true);
     });
     connect(m_document, &Document::resultTextureChanged, this, [=]() {
-        regenerateButton->showSpinner(false);
+        if (!m_document->isMeshGenerating() &&
+                !m_document->isPostProcessing() &&
+                !m_document->isTextureGenerating()) {
+            regenerateButton->showSpinner(false);
+        }
     });
     connect(regenerateButton->button(), &QPushButton::clicked, m_document, &Document::regenerateMesh);
 
     toolButtonLayout->addWidget(addButton);
     toolButtonLayout->addWidget(selectButton);
+    toolButtonLayout->addWidget(markerButton);
     toolButtonLayout->addWidget(paintButton);
     //toolButtonLayout->addWidget(dragButton);
     toolButtonLayout->addWidget(zoomInButton);
@@ -300,8 +309,9 @@ DocumentWindow::DocumentWindow() :
     m_modelRenderWidget->setMinimumSize(DocumentWindow::m_modelRenderWidgetInitialSize, DocumentWindow::m_modelRenderWidgetInitialSize);
     m_modelRenderWidget->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Minimum);
     m_modelRenderWidget->move(DocumentWindow::m_modelRenderWidgetInitialX, DocumentWindow::m_modelRenderWidgetInitialY);
-    
     m_modelRenderWidget->setMousePickRadius(m_document->mousePickRadius());
+    m_modelRenderWidget->toggleWireframe();
+    m_modelRenderWidget->enableEnvironmentLight();
     
     connect(m_modelRenderWidget, &ModelWidget::mouseRayChanged, m_document,
             [=](const QVector3D &nearPosition, const QVector3D &farPosition) {
@@ -333,8 +343,6 @@ DocumentWindow::DocumentWindow() :
     
     m_graphicsWidget->setModelWidget(m_modelRenderWidget);
     containerWidget->setModelWidget(m_modelRenderWidget);
-    
-    m_document->setSharedContextWidget(m_modelRenderWidget);
     
     setTabPosition(Qt::RightDockWidgetArea, QTabWidget::East);
 
@@ -420,30 +428,31 @@ DocumentWindow::DocumentWindow() :
     setCentralWidget(centralWidget);
     setWindowTitle(APP_NAME);
 
-    m_fileMenu = menuBar()->addMenu(tr("File"));
+    m_fileMenu = menuBar()->addMenu(tr("&File"));
 
     m_newWindowAction = new QAction(tr("New Window"), this);
     connect(m_newWindowAction, &QAction::triggered, this, &DocumentWindow::newWindow, Qt::QueuedConnection);
     m_fileMenu->addAction(m_newWindowAction);
 
-    m_newDocumentAction = new QAction(tr("New"), this);
-    connect(m_newDocumentAction, &QAction::triggered, this, &DocumentWindow::newDocument);
-    m_fileMenu->addAction(m_newDocumentAction);
+    m_newDocumentAction = m_fileMenu->addAction(tr("&New"),
+                                         this, &DocumentWindow::newDocument,
+                                         QKeySequence::New);
 
-    m_openAction = new QAction(tr("Open..."), this);
-    connect(m_openAction, &QAction::triggered, this, &DocumentWindow::open, Qt::QueuedConnection);
-    m_fileMenu->addAction(m_openAction);
+    m_openAction = m_fileMenu->addAction(tr("&Open..."),
+                                         this, &DocumentWindow::open,
+                                         QKeySequence::Open);
     
     m_openExampleMenu = new QMenu(tr("Open Example"));
     std::vector<QString> exampleModels = {
         "Addax",
         "Bicycle",
-        "Dog head",
+        "Cat",
+        "Dog",
         "Giraffe",
         "Meerkat",
         "Mosquito",
         "Seagull",
-        "Procedural Tree",
+        "Procedural Tree"
     };
     for (const auto &model: exampleModels) {
         QAction *openModelAction = new QAction(model, this);
@@ -455,9 +464,9 @@ DocumentWindow::DocumentWindow() :
     
     m_fileMenu->addMenu(m_openExampleMenu);
 
-    m_saveAction = new QAction(tr("Save"), this);
-    connect(m_saveAction, &QAction::triggered, this, &DocumentWindow::save, Qt::QueuedConnection);
-    m_fileMenu->addAction(m_saveAction);
+    m_saveAction = m_fileMenu->addAction(tr("&Save"),
+                                         this, &DocumentWindow::save,
+                                         QKeySequence::Save);
 
     m_saveAsAction = new QAction(tr("Save As..."), this);
     connect(m_saveAsAction, &QAction::triggered, this, &DocumentWindow::saveAs, Qt::QueuedConnection);
@@ -501,6 +510,10 @@ DocumentWindow::DocumentWindow() :
     
     m_fileMenu->addSeparator();
 
+    m_quitAction = m_fileMenu->addAction(tr("&Quit"),
+                                         this, &DocumentWindow::close,
+                                         QKeySequence::Quit);
+
     connect(m_fileMenu, &QMenu::aboutToShow, [=]() {
         m_exportAsObjAction->setEnabled(m_graphicsWidget->hasItems());
         //m_exportAsObjPlusMaterialsAction->setEnabled(m_graphicsWidget->hasItems());
@@ -508,7 +521,7 @@ DocumentWindow::DocumentWindow() :
         //m_exportRenderedAsImageAction->setEnabled(m_graphicsWidget->hasItems());
     });
 
-    m_editMenu = menuBar()->addMenu(tr("Edit"));
+    m_editMenu = menuBar()->addMenu(tr("&Edit"));
 
     m_addAction = new QAction(tr("Add..."), this);
     connect(m_addAction, &QAction::triggered, [=]() {
@@ -586,11 +599,11 @@ DocumentWindow::DocumentWindow() :
     });
     m_editMenu->addAction(m_clearCutFaceAction);
     
-    m_createWrapPartsAction = new QAction(tr("Create Wrap Parts"), this);
-    connect(m_createWrapPartsAction, &QAction::triggered, [=] {
-        m_graphicsWidget->createWrapParts();
-    });
-    m_editMenu->addAction(m_createWrapPartsAction);
+    //m_createWrapPartsAction = new QAction(tr("Create Wrap Parts"), this);
+    //connect(m_createWrapPartsAction, &QAction::triggered, [=] {
+    //    m_graphicsWidget->createWrapParts();
+    //});
+    //m_editMenu->addAction(m_createWrapPartsAction);
 
     m_alignToMenu = new QMenu(tr("Align To"));
 
@@ -685,7 +698,7 @@ DocumentWindow::DocumentWindow() :
         m_switchXzAction->setEnabled(m_graphicsWidget->hasSelection());
         m_setCutFaceAction->setEnabled(m_graphicsWidget->hasSelection());
         m_clearCutFaceAction->setEnabled(m_graphicsWidget->hasCutFaceAdjustedNodesSelection());
-        m_createWrapPartsAction->setEnabled(m_graphicsWidget->hasSelection());
+        //m_createWrapPartsAction->setEnabled(m_graphicsWidget->hasSelection());
         m_colorizeAsBlankAction->setEnabled(m_graphicsWidget->hasSelection());
         m_colorizeAsAutoAction->setEnabled(m_graphicsWidget->hasSelection());
         m_alignToGlobalCenterAction->setEnabled(m_graphicsWidget->hasSelection() && m_document->originSettled());
@@ -700,7 +713,7 @@ DocumentWindow::DocumentWindow() :
         m_unselectAllAction->setEnabled(m_graphicsWidget->hasSelection());
     });
 
-    m_viewMenu = menuBar()->addMenu(tr("View"));
+    m_viewMenu = menuBar()->addMenu(tr("&View"));
 
     auto isModelSitInVisibleArea = [](ModelWidget *modelWidget) {
         QRect parentRect = QRect(QPoint(0, 0), modelWidget->parentWidget()->size());
@@ -721,6 +734,29 @@ DocumentWindow::DocumentWindow() :
     });
     m_viewMenu->addAction(m_toggleWireframeAction);
     
+    m_toggleRotationAction = new QAction(tr("Toggle Rotation"), this);
+    connect(m_toggleRotationAction, &QAction::triggered, [=]() {
+        m_modelRenderWidget->toggleRotation();
+    });
+    m_viewMenu->addAction(m_toggleRotationAction);
+    
+    m_toggleColorAction = new QAction(tr("Toggle Color"), this);
+    connect(m_toggleColorAction, &QAction::triggered, [&]() {
+        m_modelRemoveColor = !m_modelRemoveColor;
+        MeshLoader *mesh = nullptr;
+        if (m_document->isMeshGenerating() &&
+                m_document->isPostProcessing() &&
+                m_document->isTextureGenerating()) {
+            mesh = m_document->takeResultMesh();
+        } else {
+            mesh = m_document->takeResultTextureMesh();
+        }
+        if (m_modelRemoveColor && mesh)
+            mesh->removeColor();
+        m_modelRenderWidget->updateMesh(mesh);
+    });
+    m_viewMenu->addAction(m_toggleColorAction);
+    
     m_toggleUvCheckAction = new QAction(tr("Toggle UV Check"), this);
     connect(m_toggleUvCheckAction, &QAction::triggered, [=]() {
         m_modelRenderWidget->toggleUvCheck();
@@ -731,7 +767,7 @@ DocumentWindow::DocumentWindow() :
         m_resetModelWidgetPosAction->setEnabled(!isModelSitInVisibleArea(m_modelRenderWidget));
     });
     
-    m_windowMenu = menuBar()->addMenu(tr("Window"));
+    m_windowMenu = menuBar()->addMenu(tr("&Window"));
     
     m_showPartsListAction = new QAction(tr("Parts"), this);
     connect(m_showPartsListAction, &QAction::triggered, [=]() {
@@ -796,7 +832,7 @@ DocumentWindow::DocumentWindow() :
     connect(m_showDebugDialogAction, &QAction::triggered, g_logBrowser, &LogBrowser::showDialog);
     m_windowMenu->addAction(m_showDebugDialogAction);
 
-    m_helpMenu = menuBar()->addMenu(tr("Help"));
+    m_helpMenu = menuBar()->addMenu(tr("&Help"));
     
     m_gotoHomepageAction = new QAction(tr("Dust3D Homepage"), this);
     connect(m_gotoHomepageAction, &QAction::triggered, this, &DocumentWindow::gotoHomepage);
@@ -851,6 +887,10 @@ DocumentWindow::DocumentWindow() :
 
     connect(selectButton, &QPushButton::clicked, [=]() {
         m_document->setEditMode(SkeletonDocumentEditMode::Select);
+    });
+    
+    connect(markerButton, &QPushButton::clicked, [=]() {
+        m_document->setEditMode(SkeletonDocumentEditMode::Mark);
     });
     
     connect(paintButton, &QPushButton::clicked, [=]() {
@@ -941,7 +981,7 @@ DocumentWindow::DocumentWindow() :
     connect(graphicsWidget, &SkeletonGraphicsWidget::setPartXmirrorState, m_document, &Document::setPartXmirrorState);
     connect(graphicsWidget, &SkeletonGraphicsWidget::setPartRoundState, m_document, &Document::setPartRoundState);
     connect(graphicsWidget, &SkeletonGraphicsWidget::setPartWrapState, m_document, &Document::setPartCutRotation);
-    connect(graphicsWidget, &SkeletonGraphicsWidget::createGriddedPartsFromNodes, m_document, &Document::createGriddedPartsFromNodes);
+    connect(graphicsWidget, &SkeletonGraphicsWidget::addPartByPolygons, m_document, &Document::addPartByPolygons);
 
     connect(graphicsWidget, &SkeletonGraphicsWidget::setXlockState, m_document, &Document::setXlockState);
     connect(graphicsWidget, &SkeletonGraphicsWidget::setYlockState, m_document, &Document::setYlockState);
@@ -951,7 +991,6 @@ DocumentWindow::DocumentWindow() :
     connect(graphicsWidget, &SkeletonGraphicsWidget::disableAllPositionRelatedLocks, m_document, &Document::disableAllPositionRelatedLocks);
 
     connect(graphicsWidget, &SkeletonGraphicsWidget::changeTurnaround, this, &DocumentWindow::changeTurnaround);
-    connect(graphicsWidget, &SkeletonGraphicsWidget::save, this, &DocumentWindow::save);
     connect(graphicsWidget, &SkeletonGraphicsWidget::open, this, &DocumentWindow::open);
     connect(graphicsWidget, &SkeletonGraphicsWidget::showCutFaceSettingPopup, this, &DocumentWindow::showCutFaceSettingPopup);
     
@@ -987,6 +1026,8 @@ DocumentWindow::DocumentWindow() :
     connect(partTreeWidget, &PartTreeWidget::setComponentExpandState, m_document, &Document::setComponentExpandState);
     connect(partTreeWidget, &PartTreeWidget::setComponentSmoothAll, m_document, &Document::setComponentSmoothAll);
     connect(partTreeWidget, &PartTreeWidget::setComponentSmoothSeam, m_document, &Document::setComponentSmoothSeam);
+    connect(partTreeWidget, &PartTreeWidget::setComponentPolyCount, m_document, &Document::setComponentPolyCount);
+    connect(partTreeWidget, &PartTreeWidget::setComponentLayer, m_document, &Document::setComponentLayer);
     connect(partTreeWidget, &PartTreeWidget::moveComponent, m_document, &Document::moveComponent);
     connect(partTreeWidget, &PartTreeWidget::removeComponent, m_document, &Document::removeComponent);
     connect(partTreeWidget, &PartTreeWidget::hideOtherComponents, m_document, &Document::hideOtherComponents);
@@ -1001,6 +1042,10 @@ DocumentWindow::DocumentWindow() :
     connect(partTreeWidget, &PartTreeWidget::setPartVisibleState, m_document, &Document::setPartVisibleState);
     connect(partTreeWidget, &PartTreeWidget::setPartColorState, m_document, &Document::setPartColorState);
     connect(partTreeWidget, &PartTreeWidget::setComponentCombineMode, m_document, &Document::setComponentCombineMode);
+    connect(partTreeWidget, &PartTreeWidget::setComponentClothStiffness, m_document, &Document::setComponentClothStiffness);
+    connect(partTreeWidget, &PartTreeWidget::setComponentClothIteration, m_document, &Document::setComponentClothIteration);
+    connect(partTreeWidget, &PartTreeWidget::setComponentClothForce, m_document, &Document::setComponentClothForce);
+    connect(partTreeWidget, &PartTreeWidget::setComponentClothOffset, m_document, &Document::setComponentClothOffset);
     connect(partTreeWidget, &PartTreeWidget::setPartTarget, m_document, &Document::setPartTarget);
     connect(partTreeWidget, &PartTreeWidget::setPartBase, m_document, &Document::setPartBase);
     connect(partTreeWidget, &PartTreeWidget::hideDescendantComponents, m_document, &Document::hideDescendantComponents);
@@ -1070,6 +1115,8 @@ DocumentWindow::DocumentWindow() :
                 return;
             }
         }
+        if (m_modelRemoveColor && resultTextureMesh)
+            resultTextureMesh->removeColor();
         m_modelRenderWidget->updateMesh(resultTextureMesh);
     });
     
@@ -1077,6 +1124,8 @@ DocumentWindow::DocumentWindow() :
         auto resultMesh = m_document->takeResultMesh();
         if (nullptr != resultMesh)
             m_currentUpdatedMeshId = resultMesh->meshId();
+        if (m_modelRemoveColor && resultMesh)
+            resultMesh->removeColor();
         m_modelRenderWidget->updateMesh(resultMesh);
     });
     
@@ -1163,26 +1212,38 @@ DocumentWindow *DocumentWindow::createDocumentWindow()
 {
     DocumentWindow *documentWindow = new DocumentWindow();
     documentWindow->setAttribute(Qt::WA_DeleteOnClose);
-    documentWindow->showMaximized();
+
+    QSize size = Preferences::instance().documentWindowSize();
+    if (size.isValid()) {
+        documentWindow->resize(size);
+        documentWindow->show();
+    } else {
+        documentWindow->showMaximized();
+    }
+
     return documentWindow;
 }
 
 void DocumentWindow::closeEvent(QCloseEvent *event)
 {
-    if (m_documentSaved) {
-        event->accept();
-        return;
+    if (! m_documentSaved) {
+        QMessageBox::StandardButton answer = QMessageBox::question(this,
+            APP_NAME,
+            tr("Do you really want to close while there are unsaved changes?"),
+            QMessageBox::Yes | QMessageBox::No,
+            QMessageBox::No);
+        if (answer == QMessageBox::No) {
+            event->ignore();
+            return;
+        }
     }
 
-    QMessageBox::StandardButton answer = QMessageBox::question(this,
-        APP_NAME,
-        tr("Do you really want to close while there are unsaved changes?"),
-        QMessageBox::Yes | QMessageBox::No,
-        QMessageBox::No);
-    if (answer == QMessageBox::Yes)
-        event->accept();
-    else
-        event->ignore();
+    QSize saveSize;
+    if (!isMaximized())
+        saveSize = size();
+    Preferences::instance().setDocumentWindowSize(saveSize);
+
+    event->accept();
 }
 
 void DocumentWindow::setCurrentFilename(const QString &filename)
@@ -1535,6 +1596,8 @@ void DocumentWindow::showPreferences()
 {
     if (nullptr == m_preferencesWidget) {
         m_preferencesWidget = new PreferencesWidget(m_document, this);
+        connect(m_preferencesWidget, &PreferencesWidget::enableBackgroundBlur, m_document, &Document::enableBackgroundBlur);
+        connect(m_preferencesWidget, &PreferencesWidget::disableBackgroundBlur, m_document, &Document::disableBackgroundBlur);
     }
     m_preferencesWidget->show();
     m_preferencesWidget->raise();
@@ -1640,6 +1703,7 @@ void DocumentWindow::exportGlbToFilename(const QString &filename)
         exportMotions.push_back({motion->name, motion->jointNodeTrees});
     }
     GlbFileWriter glbFileWriter(skeletonResult, m_document->resultRigBones(), m_document->resultRigWeights(), filename,
+        m_document->textureHasTransparencySettings,
         m_document->textureImage, m_document->textureNormalImage, m_document->textureMetalnessRoughnessAmbientOcclusionImage, exportMotions.empty() ? nullptr : &exportMotions);
     glbFileWriter.save();
     QApplication::restoreOverrideCursor();
@@ -1756,11 +1820,11 @@ void DocumentWindow::showCutFaceSettingPopup(const QPoint &globalPos, std::set<Q
     QPushButton *buttons[(int)CutFace::Count] = {0};
     
     CutFaceListWidget *cutFaceListWidget = new CutFaceListWidget(m_document);
-    size_t cutFaceTypeCount = (size_t)CutFace::Count;
-    if (cutFaceListWidget->isEmpty())
-        cutFaceTypeCount = (size_t)CutFace::UserDefined;
+    size_t cutFaceTypeCount = (size_t)CutFace::UserDefined;
     
     auto updateCutFaceButtonState = [&](size_t index) {
+        if (index != (int)CutFace::UserDefined)
+            cutFaceListWidget->selectCutFace(QUuid());
         for (size_t i = 0; i < (size_t)cutFaceTypeCount; ++i) {
             auto button = buttons[i];
             if (i == index) {
@@ -1771,8 +1835,6 @@ void DocumentWindow::showCutFaceSettingPopup(const QPoint &globalPos, std::set<Q
                 button->setEnabled(true);
             }
         }
-        if (index != (int)CutFace::UserDefined)
-            cutFaceListWidget->selectCutFace(QUuid());
     };
     
     cutFaceListWidget->enableMultipleSelection(false);
@@ -1822,13 +1884,14 @@ void DocumentWindow::showCutFaceSettingPopup(const QPoint &globalPos, std::set<Q
         standardFacesLayout->addWidget(button);
         buttons[i] = button;
     }
+    standardFacesLayout->addStretch();
     if (nullptr != node) {
         updateCutFaceButtonState((size_t)node->cutFace);
     }
     
     QVBoxLayout *popupLayout = new QVBoxLayout;
     popupLayout->addLayout(rotationLayout);
-    popupLayout->addSpacing(10);
+    popupLayout->addWidget(Theme::createHorizontalLineWidget());
     popupLayout->addLayout(standardFacesLayout);
     popupLayout->addWidget(cutFaceListWidget);
     

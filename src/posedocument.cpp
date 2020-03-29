@@ -366,8 +366,9 @@ void PoseDocument::parametersToNodes(const std::vector<RiggerBone> *rigBones,
                 node.setX(fromOutcomeX(bone.headPosition.x()));
                 node.setY(fromOutcomeY(bone.headPosition.y()));
                 node.setZ(fromOutcomeZ(bone.headPosition.z()));
+                node.name = bone.name + "Start";
                 nodeMap[node.id] = node;
-                qDebug() << "Add first node:" << (*rigBones)[edgePair.first].name;
+                //qDebug() << "Add first node:" << (*rigBones)[edgePair.first].name;
                 newAddedNodeIds.insert(node.id);
                 boneIndexToHeadNodeIdMap[edgePair.first] = node.id;
                 firstNodeId = node.id;
@@ -377,7 +378,6 @@ void PoseDocument::parametersToNodes(const std::vector<RiggerBone> *rigBones,
         }
         auto findSecond = boneIndexToHeadNodeIdMap.find(edgePair.second);
         if (findSecond == boneIndexToHeadNodeIdMap.end()) {
-            const auto &firstBone = (*rigBones)[edgePair.first];
             const auto &bone = (*rigBones)[edgePair.second];
             if (!bone.name.startsWith("Virtual_") || !m_hideRootAndVirtual) {
                 SkeletonNode node;
@@ -385,11 +385,12 @@ void PoseDocument::parametersToNodes(const std::vector<RiggerBone> *rigBones,
                 node.id = QUuid::createUuid();
                 partMap[node.partId].nodeIds.push_back(node.id);
                 node.setRadius(m_nodeRadius);
-                node.setX(fromOutcomeX(firstBone.tailPosition.x()));
-                node.setY(fromOutcomeY(firstBone.tailPosition.y()));
-                node.setZ(fromOutcomeZ(firstBone.tailPosition.z()));
+                node.setX(fromOutcomeX(bone.headPosition.x()));
+                node.setY(fromOutcomeY(bone.headPosition.y()));
+                node.setZ(fromOutcomeZ(bone.headPosition.z()));
+                node.name = bone.name;
                 nodeMap[node.id] = node;
-                qDebug() << "Add second node:" << (*rigBones)[edgePair.second].name;
+                //qDebug() << "Add second node:" << (*rigBones)[edgePair.second].name;
                 newAddedNodeIds.insert(node.id);
                 boneIndexToHeadNodeIdMap[edgePair.second] = node.id;
                 secondNodeId = node.id;
@@ -416,6 +417,30 @@ void PoseDocument::parametersToNodes(const std::vector<RiggerBone> *rigBones,
         newAddedEdgeIds.insert(edge.id);
         nodeMap[firstNodeId].edgeIds.push_back(edge.id);
         nodeMap[secondNodeId].edgeIds.push_back(edge.id);
+    }
+    
+    for (size_t i = m_hideRootAndVirtual ? 1 : 0; i < rigBones->size(); ++i) {
+        if (boneIndexToHeadNodeIdMap.find(i) != boneIndexToHeadNodeIdMap.end())
+            continue;
+        const auto &bone = (*rigBones)[i];
+        if (!bone.children.empty())
+            continue;
+        if (!bone.name.startsWith("Virtual_") || !m_hideRootAndVirtual) {
+            SkeletonSide side = SkeletonSideFromBoneName(bone.name);
+            
+            SkeletonNode node;
+            node.partId = (*m_partIdMap)[side];
+            node.id = QUuid::createUuid();
+            partMap[node.partId].nodeIds.push_back(node.id);
+            node.setRadius(m_nodeRadius);
+            node.setX(fromOutcomeX(bone.headPosition.x()));
+            node.setY(fromOutcomeY(bone.headPosition.y()));
+            node.setZ(fromOutcomeZ(bone.headPosition.z()));
+            
+            nodeMap[node.id] = node;
+            newAddedNodeIds.insert(node.id);
+            boneIndexToHeadNodeIdMap[i] = node.id;
+        }
     }
     
     for (size_t i = m_hideRootAndVirtual ? 1 : 0; i < rigBones->size(); ++i) {
@@ -453,7 +478,11 @@ void PoseDocument::parametersToNodes(const std::vector<RiggerBone> *rigBones,
             //qDebug() << "Add pair:" << bone.name << "->" << "~";
             continue;
         }
+        if (boneIndexToHeadNodeIdMap.find(i) == boneIndexToHeadNodeIdMap.end())
+            continue;
         for (const auto &child: bone.children) {
+            if (boneIndexToHeadNodeIdMap.find(child) == boneIndexToHeadNodeIdMap.end())
+                continue;
             (*boneNameToIdsMap)[bone.name] = {boneIndexToHeadNodeIdMap[i], boneIndexToHeadNodeIdMap[child]};
         }
     }
@@ -529,11 +558,13 @@ void PoseDocument::toParameters(std::map<QString, std::map<QString, QString>> &p
     for (const auto &item: m_boneNameToIdsMap) {
         const auto &boneNodeIdPair = item.second;
         auto findFirstNode = nodeMap.find(boneNodeIdPair.first);
-        if (findFirstNode == nodeMap.end())
+        if (findFirstNode == nodeMap.end()) {
             continue;
+        }
         auto findSecondNode = nodeMap.find(boneNodeIdPair.second);
-        if (findSecondNode == nodeMap.end())
+        if (findSecondNode == nodeMap.end()) {
             continue;
+        }
         if (limitNodeIds.empty() || limitNodeIds.find(boneNodeIdPair.first) != limitNodeIds.end() ||
                 limitNodeIds.find(boneNodeIdPair.second) != limitNodeIds.end()) {
             auto &boneParameter = parameters[item.first];

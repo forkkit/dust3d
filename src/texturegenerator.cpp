@@ -9,8 +9,8 @@
 #include "util.h"
 #include "texturetype.h"
 #include "material.h"
+#include "preferences.h"
 
-int TextureGenerator::m_textureSize = 1024;
 QColor TextureGenerator::m_defaultTextureColor = Qt::transparent;
 
 TextureGenerator::TextureGenerator(const Outcome &outcome, Snapshot *snapshot) :
@@ -24,10 +24,14 @@ TextureGenerator::TextureGenerator(const Outcome &outcome, Snapshot *snapshot) :
     m_resultTextureMetalnessImage(nullptr),
     m_resultTextureAmbientOcclusionImage(nullptr),
     m_resultMesh(nullptr),
-    m_snapshot(snapshot)
+    m_snapshot(snapshot),
+    m_hasTransparencySettings(false),
+    m_textureSize(Preferences::instance().textureSize())
 {
     m_outcome = new Outcome();
     *m_outcome = outcome;
+    if (m_textureSize <= 0)
+        m_textureSize = 1024;
 }
 
 TextureGenerator::~TextureGenerator()
@@ -210,6 +214,11 @@ void TextureGenerator::prepare()
     }
 }
 
+bool TextureGenerator::hasTransparencySettings()
+{
+    return m_hasTransparencySettings;
+}
+
 void TextureGenerator::generate()
 {
     m_resultMesh = new MeshLoader(*m_outcome);
@@ -240,6 +249,10 @@ void TextureGenerator::generate()
     std::map<std::pair<QUuid, QUuid>, const OutcomeNode *> nodeMap;
     std::map<QUuid, float> partColorSolubilityMap;
     for (const auto &item: m_outcome->nodes) {
+        if (!m_hasTransparencySettings) {
+            if (!qFuzzyCompare(1.0, item.color.alphaF()))
+                m_hasTransparencySettings = true;
+        }
         nodeMap.insert({{item.partId, item.nodeId}, &item});
         partColorMap.insert({item.partId, item.color});
         partColorSolubilityMap.insert({item.partId, item.colorSolubility});
@@ -248,7 +261,7 @@ void TextureGenerator::generate()
     auto createImageBeginTime = countTimeConsumed.elapsed();
     
     m_resultTextureColorImage = new QImage(TextureGenerator::m_textureSize, TextureGenerator::m_textureSize, QImage::Format_ARGB32);
-    m_resultTextureColorImage->fill(m_defaultTextureColor);
+    m_resultTextureColorImage->fill(m_hasTransparencySettings ? m_defaultTextureColor : Qt::white);
     
     m_resultTextureBorderImage = new QImage(TextureGenerator::m_textureSize, TextureGenerator::m_textureSize, QImage::Format_ARGB32);
     m_resultTextureBorderImage->fill(Qt::transparent);

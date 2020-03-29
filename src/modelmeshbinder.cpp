@@ -5,8 +5,9 @@
 #include <map>
 #include <QDebug>
 #include <QDir>
+#include <QSurfaceFormat>
 #include "modelmeshbinder.h"
-#include "ds3file.h"
+#include "ddsfile.h"
 
 ModelMeshBinder::ModelMeshBinder(bool toolEnabled) :
     m_toolEnabled(toolEnabled)
@@ -20,6 +21,8 @@ ModelMeshBinder::~ModelMeshBinder()
     delete m_texture;
     delete m_normalMap;
     delete m_metalnessRoughnessAmbientOcclusionMap;
+    delete m_environmentIrradianceMap;
+    delete m_environmentSpecularMap;
 }
 
 void ModelMeshBinder::updateMesh(MeshLoader *mesh)
@@ -53,6 +56,11 @@ void ModelMeshBinder::initialize()
         m_vaoTool.create();
 }
 
+void ModelMeshBinder::enableEnvironmentLight()
+{
+    m_environmentLightEnabled = true;
+}
+
 void ModelMeshBinder::paint(ModelShaderProgram *program)
 {
     MeshLoader *newMesh = nullptr;
@@ -72,7 +80,6 @@ void ModelMeshBinder::paint(ModelShaderProgram *program)
             delete m_mesh;
             m_mesh = newMesh;
             if (m_mesh) {
-            
                 m_hasTexture = nullptr != m_mesh->textureImage();
                 delete m_texture;
                 m_texture = nullptr;
@@ -101,7 +108,21 @@ void ModelMeshBinder::paint(ModelShaderProgram *program)
                 if (nullptr != m_mesh->metalnessRoughnessAmbientOcclusionImage() &&
                         (m_hasMetalnessMap || m_hasRoughnessMap || m_hasAmbientOcclusionMap))
                     m_metalnessRoughnessAmbientOcclusionMap = new QOpenGLTexture(*m_mesh->metalnessRoughnessAmbientOcclusionImage());
+                
+                delete m_environmentIrradianceMap;
+                m_environmentIrradianceMap = nullptr;
+                delete m_environmentSpecularMap;
+                m_environmentSpecularMap = nullptr;
+                if (program->isCoreProfile() && 
+                        m_environmentLightEnabled &&
+                        (m_hasMetalnessMap || m_hasRoughnessMap)) {
+                    DdsFileReader irradianceFile(":/resources/cedar_bridge_irradiance.dds");
+                    m_environmentIrradianceMap = irradianceFile.createOpenGLTexture();
                     
+                    DdsFileReader specularFile(":/resources/cedar_bridge_specular.dds");
+                    m_environmentSpecularMap = specularFile.createOpenGLTexture();
+                }
+                
                 {
                     QOpenGLVertexArrayObject::Binder vaoBinder(&m_vaoTriangle);
                     if (m_vboTriangle.isCreated())
@@ -192,17 +213,28 @@ void ModelMeshBinder::paint(ModelShaderProgram *program)
             }
         }
     }
-    
+    program->setUniformValue(program->textureIdLoc(), 0);
+    program->setUniformValue(program->normalMapIdLoc(), 1);
+    program->setUniformValue(program->metalnessRoughnessAmbientOcclusionMapIdLoc(), 2);
+    program->setUniformValue(program->environmentIrradianceMapIdLoc(), 3);
+    program->setUniformValue(program->environmentSpecularMapIdLoc(), 4);
     if (m_showWireframes) {
         if (m_renderEdgeVertexCount > 0) {
             QOpenGLVertexArrayObject::Binder vaoBinder(&m_vaoEdge);
 			QOpenGLFunctions *f = QOpenGLContext::currentContext()->functions();
-            program->setUniformValue(program->textureEnabledLoc(), 0);
-            program->setUniformValue(program->normalMapEnabledLoc(), 0);
-            program->setUniformValue(program->metalnessMapEnabledLoc(), 0);
-            program->setUniformValue(program->roughnessMapEnabledLoc(), 0);
-            program->setUniformValue(program->ambientOcclusionMapEnabledLoc(), 0);
-            f->glDrawArrays(GL_LINES, 0, m_renderEdgeVertexCount);
+            // glDrawArrays GL_LINES crashs on Mesa GL
+            if (program->isCoreProfile()) {
+                program->setUniformValue(program->textureEnabledLoc(), 0);
+                program->setUniformValue(program->normalMapEnabledLoc(), 0);
+                program->setUniformValue(program->metalnessMapEnabledLoc(), 0);
+                program->setUniformValue(program->roughnessMapEnabledLoc(), 0);
+                program->setUniformValue(program->ambientOcclusionMapEnabledLoc(), 0);
+                if (program->isCoreProfile()) {
+                    program->setUniformValue(program->environmentIrradianceMapEnabledLoc(), 0);
+                    program->setUniformValue(program->environmentSpecularMapEnabledLoc(), 0);
+                }
+                f->glDrawArrays(GL_LINES, 0, m_renderEdgeVertexCount);
+            }
         }
     }
     if (m_renderTriangleVertexCount > 0) {
@@ -211,7 +243,6 @@ void ModelMeshBinder::paint(ModelShaderProgram *program)
         if (m_hasTexture) {
             if (m_texture)
                 m_texture->bind(0);
-            program->setUniformValue(program->textureIdLoc(), 0);
             program->setUniformValue(program->textureEnabledLoc(), 1);
         } else {
             program->setUniformValue(program->textureEnabledLoc(), 0);
@@ -219,7 +250,6 @@ void ModelMeshBinder::paint(ModelShaderProgram *program)
         if (m_hasNormalMap) {
             if (m_normalMap)
                 m_normalMap->bind(1);
-            program->setUniformValue(program->normalMapIdLoc(), 1);
             program->setUniformValue(program->normalMapEnabledLoc(), 1);
         } else {
             program->setUniformValue(program->normalMapEnabledLoc(), 0);
@@ -227,11 +257,24 @@ void ModelMeshBinder::paint(ModelShaderProgram *program)
         if (m_hasMetalnessMap || m_hasRoughnessMap || m_hasAmbientOcclusionMap) {
             if (m_metalnessRoughnessAmbientOcclusionMap)
                 m_metalnessRoughnessAmbientOcclusionMap->bind(2);
-            program->setUniformValue(program->metalnessRoughnessAmbientOcclusionMapIdLoc(), 2);
-        }
+		}
         program->setUniformValue(program->metalnessMapEnabledLoc(), m_hasMetalnessMap ? 1 : 0);
         program->setUniformValue(program->roughnessMapEnabledLoc(), m_hasRoughnessMap ? 1 : 0);
         program->setUniformValue(program->ambientOcclusionMapEnabledLoc(), m_hasAmbientOcclusionMap ? 1 : 0);
+        if (program->isCoreProfile()) {
+            if (nullptr != m_environmentIrradianceMap) {
+                m_environmentIrradianceMap->bind(3);
+                program->setUniformValue(program->environmentIrradianceMapEnabledLoc(), 1);
+            } else {
+                program->setUniformValue(program->environmentIrradianceMapEnabledLoc(), 0);
+            }
+            if (nullptr != m_environmentSpecularMap) {
+                m_environmentSpecularMap->bind(4);
+                program->setUniformValue(program->environmentSpecularMapEnabledLoc(), 1);
+            } else {
+                program->setUniformValue(program->environmentSpecularMapEnabledLoc(), 0);
+            }
+        }
         f->glDrawArrays(GL_TRIANGLES, 0, m_renderTriangleVertexCount);
     }
     if (m_toolEnabled) {
@@ -243,6 +286,10 @@ void ModelMeshBinder::paint(ModelShaderProgram *program)
             program->setUniformValue(program->metalnessMapEnabledLoc(), 0);
             program->setUniformValue(program->roughnessMapEnabledLoc(), 0);
             program->setUniformValue(program->ambientOcclusionMapEnabledLoc(), 0);
+            if (program->isCoreProfile()) {
+                program->setUniformValue(program->environmentIrradianceMapEnabledLoc(), 0);
+                program->setUniformValue(program->environmentSpecularMapEnabledLoc(), 0);
+            }
             f->glDrawArrays(GL_TRIANGLES, 0, m_renderToolVertexCount);
         }
     }
@@ -264,6 +311,10 @@ void ModelMeshBinder::cleanup()
     m_normalMap = nullptr;
     delete m_metalnessRoughnessAmbientOcclusionMap;
     m_metalnessRoughnessAmbientOcclusionMap = nullptr;
+    delete m_environmentIrradianceMap;
+    m_environmentIrradianceMap = nullptr;
+    delete m_environmentSpecularMap;
+    m_environmentSpecularMap = nullptr;
 }
 
 void ModelMeshBinder::showWireframes()

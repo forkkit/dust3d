@@ -8,6 +8,8 @@
 #include <QFileDialog>
 #include <QSizePolicy>
 #include <QCheckBox>
+#include <QLabel>
+#include <QRadioButton>
 #include "partwidget.h"
 #include "theme.h"
 #include "floatnumberwidget.h"
@@ -323,11 +325,11 @@ void PartWidget::updateUnnormalState(bool unnormal)
     updateAllButtons();
 }
 
-void PartWidget::mouseDoubleClickEvent(QMouseEvent *event)
-{
-    QWidget::mouseDoubleClickEvent(event);
-    emit checkPart(m_partId);
-}
+//void PartWidget::mouseDoubleClickEvent(QMouseEvent *event)
+//{
+//    QWidget::mouseDoubleClickEvent(event);
+//    emit checkPart(m_partId);
+//}
 
 void PartWidget::initToolButtonWithoutFont(QPushButton *button)
 {
@@ -556,11 +558,11 @@ void PartWidget::showCutRotationSettingPopup(const QPoint &pos)
     QPushButton *buttons[(int)CutFace::Count] = {0};
     
     CutFaceListWidget *cutFaceListWidget = new CutFaceListWidget(m_document);
-    size_t cutFaceTypeCount = (size_t)CutFace::Count;
-    if (cutFaceListWidget->isEmpty())
-        cutFaceTypeCount = (size_t)CutFace::UserDefined;
+    size_t cutFaceTypeCount = (size_t)CutFace::UserDefined;
     
     auto updateCutFaceButtonState = [&](size_t index) {
+        if (index != (int)CutFace::UserDefined)
+            cutFaceListWidget->selectCutFace(QUuid());
         for (size_t i = 0; i < (size_t)cutFaceTypeCount; ++i) {
             auto button = buttons[i];
             if (i == index) {
@@ -571,8 +573,6 @@ void PartWidget::showCutRotationSettingPopup(const QPoint &pos)
                 button->setEnabled(true);
             }
         }
-        if (index != (int)CutFace::UserDefined)
-            cutFaceListWidget->selectCutFace(QUuid());
     };
     
     cutFaceListWidget->enableMultipleSelection(false);
@@ -608,12 +608,13 @@ void PartWidget::showCutRotationSettingPopup(const QPoint &pos)
         standardFacesLayout->addWidget(button);
         buttons[i] = button;
     }
+    standardFacesLayout->addStretch();
     updateCutFaceButtonState((size_t)part->cutFace);
     
     QVBoxLayout *popupLayout = new QVBoxLayout;
     popupLayout->addLayout(rotationLayout);
     popupLayout->addLayout(hollowThicknessLayout);
-    popupLayout->addSpacing(10);
+    popupLayout->addWidget(Theme::createHorizontalLineWidget());
     popupLayout->addLayout(standardFacesLayout);
     popupLayout->addWidget(cutFaceListWidget);
     
@@ -793,6 +794,19 @@ void PartWidget::updatePreview()
     //m_previewLabel->setPixmap(QPixmap::fromImage(part->preview));
     MeshLoader *previewMesh = part->takePreviewMesh();
     m_previewWidget->updateMesh(previewMesh);
+    if (PartTarget::CutFace == part->target) {
+        if (0 != m_previewWidget->xRot()) {
+            m_previewWidget->setXRotation(0);
+            m_previewWidget->setYRotation(0);
+            m_previewWidget->setZRotation(0);
+        }
+    } else {
+        if (0 == m_previewWidget->xRot()) {
+            m_previewWidget->setXRotation(ModelWidget::m_defaultXRotation);
+            m_previewWidget->setYRotation(ModelWidget::m_defaultYRotation);
+            m_previewWidget->setZRotation(ModelWidget::m_defaultZRotation);
+        }
+    }
 }
 
 void PartWidget::updateLockButton()

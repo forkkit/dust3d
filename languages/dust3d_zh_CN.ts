@@ -9,13 +9,6 @@
     </message>
 </context>
 <context>
-    <name>AnimalRigger</name>
-    <message>
-        <source>Please mark the neck, limbs and joints from the context menu</source>
-        <translation>请从右键菜单中选择，标记脖子，胳膊以及关节的结点</translation>
-    </message>
-</context>
-<context>
     <name>Document</name>
     <message>
         <source>Group</source>
@@ -99,28 +92,12 @@ Tips:
         <translation>动作</translation>
     </message>
     <message>
-        <source>File</source>
-        <translation>文件</translation>
-    </message>
-    <message>
         <source>New Window</source>
         <translation>新建窗口</translation>
     </message>
     <message>
-        <source>New</source>
-        <translation>新建</translation>
-    </message>
-    <message>
-        <source>Open...</source>
-        <translation>打开...</translation>
-    </message>
-    <message>
         <source>Open Example</source>
         <translation>打开例子</translation>
-    </message>
-    <message>
-        <source>Save</source>
-        <translation>保存</translation>
     </message>
     <message>
         <source>Save As...</source>
@@ -145,10 +122,6 @@ Tips:
     <message>
         <source>Change Reference Sheet...</source>
         <translation>修改参考图...</translation>
-    </message>
-    <message>
-        <source>Edit</source>
-        <translation>编辑</translation>
     </message>
     <message>
         <source>Add...</source>
@@ -255,10 +228,6 @@ Tips:
         <translation>取消全选</translation>
     </message>
     <message>
-        <source>View</source>
-        <translation>视图</translation>
-    </message>
-    <message>
         <source>Show Model</source>
         <translation>显示模型</translation>
     </message>
@@ -267,20 +236,12 @@ Tips:
         <translation>切换网格线</translation>
     </message>
     <message>
-        <source>Window</source>
-        <translation>窗口</translation>
-    </message>
-    <message>
         <source>Dialogs</source>
         <translation>对话框</translation>
     </message>
     <message>
         <source>Debug</source>
         <translation>调试</translation>
-    </message>
-    <message>
-        <source>Help</source>
-        <translation>帮助</translation>
     </message>
     <message>
         <source>Dust3D Homepage</source>
@@ -351,10 +312,6 @@ Tips:
         <translation>清除切面</translation>
     </message>
     <message>
-        <source>Script</source>
-        <translation>脚本</translation>
-    </message>
-    <message>
         <source>Check for Updates...</source>
         <translation>检查新版本...</translation>
     </message>
@@ -365,10 +322,6 @@ Tips:
     <message>
         <source>Toggle UV Check</source>
         <translation>切换UV检查</translation>
-    </message>
-    <message>
-        <source>Toggle rotation</source>
-        <translation>旋转视角</translation>
     </message>
     <message>
         <source>Colorize</source>
@@ -383,8 +336,60 @@ Tips:
         <translation>自动着色</translation>
     </message>
     <message>
-        <source>Create Wrap Parts</source>
-        <translation>创建包裹部件</translation>
+        <source>Marker pen</source>
+        <translation>马克笔</translation>
+    </message>
+    <message>
+        <source>&amp;Quit</source>
+        <translation>退出(&amp;Q)</translation>
+    </message>
+    <message>
+        <source>&amp;File</source>
+        <translation>文件(&amp;F)</translation>
+    </message>
+    <message>
+        <source>&amp;New</source>
+        <translation>新建(&amp;N)</translation>
+    </message>
+    <message>
+        <source>&amp;Open...</source>
+        <translation>打开(&amp;O)</translation>
+    </message>
+    <message>
+        <source>&amp;Save</source>
+        <translation>保存(&amp;S)</translation>
+    </message>
+    <message>
+        <source>&amp;Edit</source>
+        <translation>编辑(&amp;E)</translation>
+    </message>
+    <message>
+        <source>&amp;View</source>
+        <translation>查看(&amp;V)</translation>
+    </message>
+    <message>
+        <source>&amp;Window</source>
+        <translation>窗口(&amp;W)</translation>
+    </message>
+    <message>
+        <source>&amp;Help</source>
+        <translation>帮助(&amp;H)</translation>
+    </message>
+    <message>
+        <source>Toggle Rotation</source>
+        <translation>打开/关闭自动旋转</translation>
+    </message>
+    <message>
+        <source>Toggle viewport</source>
+        <translation>切换视图</translation>
+    </message>
+    <message>
+        <source>Toggle Color</source>
+        <translation>打开/关闭颜色</translation>
+    </message>
+    <message>
+        <source>Script</source>
+        <translation>脚本</translation>
     </message>
 </context>
 <context>
@@ -543,10 +548,6 @@ Tips:
     <message>
         <source>Motions</source>
         <translation>动作</translation>
-    </message>
-    <message>
-        <source>Procedural Animations</source>
-        <translation>程序化动画</translation>
     </message>
 </context>
 <context>
@@ -731,6 +732,34 @@ Tips:
     <message>
         <source>Paste Color</source>
         <translation>粘贴颜色</translation>
+    </message>
+    <message>
+        <source>Poly</source>
+        <translation>面数</translation>
+    </message>
+    <message>
+        <source>Layer</source>
+        <translation>层</translation>
+    </message>
+    <message>
+        <source>Stiffness</source>
+        <translation>硬度</translation>
+    </message>
+    <message>
+        <source>Force</source>
+        <translation>力</translation>
+    </message>
+    <message>
+        <source>Offset</source>
+        <translation>偏移</translation>
+    </message>
+    <message>
+        <source>Iteration</source>
+        <translation>迭代</translation>
+    </message>
+    <message>
+        <source>Rename</source>
+        <translation>重命名</translation>
     </message>
 </context>
 <context>
@@ -935,6 +964,10 @@ Tips:
         <source>Preferences</source>
         <translation>偏好设定</translation>
     </message>
+    <message>
+        <source>Texture size:</source>
+        <translation>纹理大小：</translation>
+    </message>
 </context>
 <context>
     <name>QObject</name>
@@ -1038,31 +1071,79 @@ Tips:
         <source>Fall to Death</source>
         <translation>倒地死亡</translation>
     </message>
+    <message>
+        <source>Low Poly</source>
+        <translation>低面数</translation>
+    </message>
+    <message>
+        <source>Original</source>
+        <translation>原样</translation>
+    </message>
+    <message>
+        <source>High Poly</source>
+        <translation>高面数</translation>
+    </message>
+    <message>
+        <source>Body</source>
+        <translation>身体</translation>
+    </message>
+    <message>
+        <source>Cloth</source>
+        <translation>衣服</translation>
+    </message>
+    <message>
+        <source>Gravitational</source>
+        <translation>重力</translation>
+    </message>
+    <message>
+        <source>Centripetal</source>
+        <translation>向心力</translation>
+    </message>
+    <message>
+        <source>Extremely High Poly</source>
+        <translation>极高面数</translation>
+    </message>
+    <message>
+        <source>Ultra High Poly</source>
+        <translation>超高面数</translation>
+    </message>
+    <message>
+        <source>Tremendously High Poly</source>
+        <translation>巨多面数</translation>
+    </message>
+    <message>
+        <source>Medium Poly</source>
+        <translation>中面数</translation>
+    </message>
+    <message>
+        <source>Very High Poly</source>
+        <translation>很高面数</translation>
+    </message>
+</context>
+<context>
+    <name>RigGenerator</name>
+    <message>
+        <source>Imbalanced left and right limbs</source>
+        <translation>左右臂数目不平衡</translation>
+    </message>
+    <message>
+        <source>No limbs found</source>
+        <translation>没有发现胳膊标记</translation>
+    </message>
+    <message>
+        <source>No body found</source>
+        <translation>计算身体失败</translation>
+    </message>
+    <message>
+        <source>Please mark the neck, limbs and joints from the context menu</source>
+        <translation>请从右键菜单中选择，标记脖子，胳膊以及关节的结点</translation>
+    </message>
 </context>
 <context>
     <name>RigWidget</name>
     <message>
         <source>Type</source>
         <translation>类型</translation>
-    </message>
-</context>
-<context>
-    <name>Rigger</name>
-    <message>
-        <source>Calculate body from marks failed, try to move the center anchor around</source>
-        <translation>从标记中计算身体失败，尝试移动中心锚点</translation>
-    </message>
-    <message>
-        <source>The center anchor is not located in the center of the model</source>
-        <translation>中心锚点不在模型中央</translation>
-    </message>
-    <message>
-        <source>The following marks couldn&apos;t cut off the mesh, pelease try mark more nearby nodes for them: %1</source>
-        <translation>下列标记的结点不能分割模型，请尝试标记更多附近的结点：%1</translation>
-    </message>
-    <message>
-        <source>The following marks looks like don&apos;t contain any vertices, pelease try mark other nearby nodes for them: %1</source>
-        <translation>下列标记的结点看起来好像没有参与模型生成，请尝试标记其它附近的结点：%1</translation>
     </message>
 </context>
 <context>
@@ -1194,10 +1275,6 @@ Tips:
     <message>
         <source>Colorize</source>
         <translation>着色</translation>
-    </message>
-    <message>
-        <source>Create Wrap Parts</source>
-        <translation>创建包裹部件</translation>
     </message>
 </context>
 <context>

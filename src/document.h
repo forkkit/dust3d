@@ -9,7 +9,7 @@
 #include <QImage>
 #include <cmath>
 #include <algorithm>
-#include <QOpenGLWidget>
+#include <QPolygon>
 #include "snapshot.h"
 #include "meshloader.h"
 #include "meshgenerator.h"
@@ -25,9 +25,12 @@
 #include "jointnodetree.h"
 #include "skeletondocument.h"
 #include "combinemode.h"
+#include "polycount.h"
 #include "preferences.h"
 #include "paintmode.h"
 #include "proceduralanimation.h"
+#include "componentlayer.h"
+#include "clothforce.h"
 
 class MaterialPreviewsGenerator;
 class MotionsGenerator;
@@ -44,6 +47,8 @@ public:
 class Component
 {
 public:
+    static const float defaultClothStiffness;
+    static const size_t defaultClothIteration;
     Component()
     {
     }
@@ -65,6 +70,12 @@ public:
     bool dirty = true;
     float smoothAll = 0.0;
     float smoothSeam = 0.0;
+    PolyCount polyCount = PolyCount::Original;
+    ComponentLayer layer = ComponentLayer::Body;
+    float clothStiffness = defaultClothStiffness;
+    ClothForce clothForce = ClothForce::Gravitational;
+    float clothOffset = 0.0f;
+    size_t clothIteration = defaultClothIteration;
     std::vector<QUuid> childrenIds;
     QString linkData() const
     {
@@ -183,6 +194,22 @@ public:
     bool smoothAdjusted() const
     {
         return smoothAllAdjusted() || smoothSeamAdjusted();
+    }
+    bool clothStiffnessAdjusted() const
+    {
+        return fabs(clothStiffness - Component::defaultClothStiffness) >= 0.01;
+    }
+    bool clothIterationAdjusted() const
+    {
+        return clothIteration != defaultClothIteration;
+    }
+    bool clothForceAdjusted() const
+    {
+        return ClothForce::Gravitational != clothForce;
+    }
+    bool clothOffsetAdjusted() const
+    {
+        return fabs(clothOffset - 0.0) >= 0.01;
     }
 private:
     std::set<QUuid> m_childrenIdSet;
@@ -393,6 +420,12 @@ signals:
     void componentExpandStateChanged(QUuid componentId);
     void componentSmoothAllChanged(QUuid componentId);
     void componentSmoothSeamChanged(QUuid componentId);
+    void componentPolyCountChanged(QUuid componentId);
+    void componentLayerChanged(QUuid componentId);
+    void componentClothStiffnessChanged(QUuid componentId);
+    void componentClothIterationChanged(QUuid componentId);
+    void componentClothForceChanged(QUuid componentId);
+    void componentClothOffsetChanged(QUuid componentId);
     void nodeRemoved(QUuid nodeId);
     void edgeRemoved(QUuid edgeId);
     void nodeRadiusChanged(QUuid nodeId);
@@ -500,8 +533,10 @@ public: // need initialize
     QImage *textureMetalnessImage;
     QImage *textureRoughnessImage;
     QImage *textureAmbientOcclusionImage;
+    bool textureHasTransparencySettings;
     RigType rigType;
     bool weldEnabled;
+    PolyCount polyCount;
 public:
     Document();
     ~Document();
@@ -541,7 +576,6 @@ public:
     const std::vector<RiggerBone> *resultRigBones() const;
     const std::map<int, RiggerVertexWeights> *resultRigWeights() const;
     void updateTurnaround(const QImage &image);
-    void setSharedContextWidget(QOpenGLWidget *sharedContextWidget);
     bool hasPastableMaterialsInClipboard() const;
     bool hasPastablePosesInClipboard() const;
     bool hasPastableMotionsInClipboard() const;
@@ -554,6 +588,8 @@ public:
     const Outcome &currentRiggedOutcome() const;
     bool currentRigSucceed() const;
     bool isMeshGenerating() const;
+    bool isPostProcessing() const;
+    bool isTextureGenerating() const;
     const QString &script() const;
     const std::map<QString, std::map<QString, QString>> &variables() const;
     const QString &scriptError() const;
@@ -567,6 +603,7 @@ public slots:
     void removeNode(QUuid nodeId);
     void removeEdge(QUuid edgeId);
     void removePart(QUuid partId);
+    void addPartByPolygons(const QPolygonF &mainProfile, const QPolygonF &sideProfile, const QSizeF &canvasSize);
     void addNodeWithId(QUuid nodeId, float x, float y, float z, float radius, QUuid fromNodeId);
     void addNode(float x, float y, float z, float radius, QUuid fromNodeId);
     void scaleNodeByAddRadius(QUuid nodeId, float amount);
@@ -584,9 +621,6 @@ public slots:
     void setEditMode(SkeletonDocumentEditMode mode);
     void setPaintMode(PaintMode mode);
     void setMousePickRadius(float radius);
-    void createGriddedPartsFromNodes(const std::set<QUuid> &nodeIds);
-    void createFromNodesAndEdges(const std::vector<QVector3D> &nodes,
-        const std::vector<std::pair<size_t, size_t>> &edges);
     void createSinglePartFromEdges(const std::vector<QVector3D> &nodes,
         const std::vector<std::pair<size_t, size_t>> &edges);
     void uiReady();
@@ -645,6 +679,12 @@ public slots:
     void setComponentExpandState(QUuid componentId, bool expanded);
     void setComponentSmoothAll(QUuid componentId, float toSmoothAll);
     void setComponentSmoothSeam(QUuid componentId, float toSmoothSeam);
+    void setComponentPolyCount(QUuid componentId, PolyCount count);
+    void setComponentLayer(QUuid componentId, ComponentLayer layer);
+    void setComponentClothStiffness(QUuid componentId, float stiffness);
+    void setComponentClothIteration(QUuid componentId, size_t iteration);
+    void setComponentClothForce(QUuid componentId, ClothForce force);
+    void setComponentClothOffset(QUuid componentId, float offset);
     void hideOtherComponents(QUuid componentId);
     void lockOtherComponents(QUuid componentId);
     void hideAllComponents();
@@ -694,6 +734,7 @@ public slots:
     void renameMaterial(QUuid materialId, QString name);
     void applyPreferencePartColorChange();
     void applyPreferenceFlatShadingChange();
+    void applyPreferenceTextureSizeChange();
     void initScript(const QString &script);
     void updateScript(const QString &script);
     void runScript();
@@ -738,7 +779,6 @@ private: // need initialize
     Outcome *m_postProcessedOutcome;
     MeshLoader *m_resultTextureMesh;
     unsigned long long m_textureImageUpdateVersion;
-    QOpenGLWidget *m_sharedContextWidget;
     QUuid m_currentCanvasComponentId;
     bool m_allPositionRelatedLocksEnabled;
     bool m_smoothNormal;

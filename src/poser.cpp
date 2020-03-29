@@ -79,7 +79,10 @@ void Poser::fetchChains(const std::vector<QString> &boneNames, std::map<QString,
             match = reSpine.match(item);
             if (match.hasMatch()) {
                 QString name = match.captured(1);
-                chains[name].push_back(item);
+                if (item.startsWith(name + "0"))
+                    chains[name + "0"].push_back(item);
+                else
+                    chains[name].push_back(item);
             } else if (item.startsWith("Virtual_")) {
                 //qDebug() << "Ignore connector:" << item;
             } else {

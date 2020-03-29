@@ -1,4 +1,3 @@
-#include <QSurfaceFormat>
 #include <QFile>
 #include <map>
 #include "modelshaderprogram.h"
@@ -17,18 +16,20 @@ const QString &ModelShaderProgram::loadShaderSource(const QString &name)
     return insertResult.first->second;
 }
 
-ModelShaderProgram::ModelShaderProgram(bool usePBR)
+bool ModelShaderProgram::isCoreProfile()
 {
-    if (QSurfaceFormat::defaultFormat().profile() == QSurfaceFormat::CoreProfile) {
+    return m_isCoreProfile;
+}
+
+ModelShaderProgram::ModelShaderProgram(bool isCoreProfile)
+{
+    if (isCoreProfile) {
         this->addShaderFromSourceCode(QOpenGLShader::Vertex, loadShaderSource(":/shaders/default.core.vert"));
         this->addShaderFromSourceCode(QOpenGLShader::Fragment, loadShaderSource(":/shaders/default.core.frag"));
+        m_isCoreProfile = true;
     } else {
         this->addShaderFromSourceCode(QOpenGLShader::Vertex, loadShaderSource(":/shaders/default.vert"));
-        if (usePBR) {
-            this->addShaderFromSourceCode(QOpenGLShader::Fragment, loadShaderSource(":/shaders/pbr-qt.frag"));
-        } else {
-            this->addShaderFromSourceCode(QOpenGLShader::Fragment, loadShaderSource(":/shaders/default.frag"));
-        }
+        this->addShaderFromSourceCode(QOpenGLShader::Fragment, loadShaderSource(":/shaders/default.frag"));
     }
     this->bindAttributeLocation("vertex", 0);
     this->bindAttributeLocation("normal", 1);
@@ -57,6 +58,12 @@ ModelShaderProgram::ModelShaderProgram(bool usePBR)
     m_mousePickEnabledLoc = this->uniformLocation("mousePickEnabled");
     m_mousePickTargetPositionLoc = this->uniformLocation("mousePickTargetPosition");
     m_mousePickRadiusLoc = this->uniformLocation("mousePickRadius");
+    if (m_isCoreProfile) {
+        m_environmentIrradianceMapIdLoc = this->uniformLocation("environmentIrradianceMapId");
+        m_environmentIrradianceMapEnabledLoc = this->uniformLocation("environmentIrradianceMapEnabled");
+        m_environmentSpecularMapIdLoc = this->uniformLocation("environmentSpecularMapId");
+        m_environmentSpecularMapEnabledLoc = this->uniformLocation("environmentSpecularMapEnabled");
+    }
 }
 
 int ModelShaderProgram::projectionMatrixLoc()
@@ -138,3 +145,24 @@ int ModelShaderProgram::mousePickRadiusLoc()
 {
     return m_mousePickRadiusLoc;
 }
+
+int ModelShaderProgram::environmentIrradianceMapIdLoc()
+{
+    return m_environmentIrradianceMapIdLoc;
+}
+
+int ModelShaderProgram::environmentIrradianceMapEnabledLoc()
+{
+    return m_environmentIrradianceMapEnabledLoc;
+}
+
+int ModelShaderProgram::environmentSpecularMapIdLoc()
+{
+    return m_environmentSpecularMapIdLoc;
+}
+
+int ModelShaderProgram::environmentSpecularMapEnabledLoc()
+{
+    return m_environmentSpecularMapEnabledLoc;
+}
+

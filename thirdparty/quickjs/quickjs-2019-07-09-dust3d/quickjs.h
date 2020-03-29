@@ -28,6 +28,14 @@
 #include <stdio.h>
 #include <stdint.h>
 
+#if defined(_WIN64)
+#define CastToJSValue(v)            v
+#define CastToJSValueConst(v)       v
+#else
+#define CastToJSValue(v)            (JSValue)v
+#define CastToJSValueConst(v)       (JSValueConst)v
+#endif
+
 #if defined(__GNUC__) || defined(__clang__)
 #define js_likely(x)          __builtin_expect(!!(x), 1)
 #define js_unlikely(x)        __builtin_expect(!!(x), 0)
@@ -49,7 +57,7 @@ typedef struct JSClass JSClass;
 typedef uint32_t JSClassID;
 typedef uint32_t JSAtom;
 
-#if defined(__x86_64__) || defined(__aarch64__)
+#if defined(__x86_64__) || defined(__aarch64__) || defined(_WIN64)
 #define JS_PTR64
 #define JS_PTR64_DEF(a) a
 #else
@@ -204,7 +212,7 @@ typedef struct JSValue {
 //#define JS_MKVAL(tag, val) (JSValue){ .u.int32 = val, tag }
 static inline JSValue JS_MKVAL(uint64_t tag, int32_t val)
 {
-    JSValue value = {};
+    JSValue value = {0};
     value.u.int32 = val;
     value.tag = tag;
     return value;
@@ -213,7 +221,7 @@ static inline JSValue JS_MKVAL(uint64_t tag, int32_t val)
 //#define JS_MKPTR(tag, p) (JSValue){ .u.ptr = p, tag }
 static inline JSValue JS_MKPTR(uint64_t tag, void *ptr)
 {
-    JSValue value = {};
+    JSValue value = {0};
     value.u.ptr = ptr;
     value.tag = tag;
     return value;
@@ -603,7 +611,7 @@ static inline JSValue JS_DupValue(JSContext *ctx, JSValueConst v)
         JSRefCountHeader *p = (JSRefCountHeader *)JS_VALUE_GET_PTR(v);
         p->ref_count++;
     }
-    return (JSValue)v;
+    return CastToJSValue(v);
 }
 
 int JS_ToBool(JSContext *ctx, JSValueConst val); /* return -1 for JS_EXCEPTION */

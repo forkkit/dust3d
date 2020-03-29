@@ -118,6 +118,7 @@ private:
     QAction *m_showPreferencesAction;
     QMenu *m_exportMenu;
     QAction *m_changeTurnaroundAction;
+    QAction *m_quitAction;
     
     QAction *m_exportAsObjAction;
     QAction *m_exportAsObjPlusMaterialsAction;
@@ -167,7 +168,9 @@ private:
     QAction *m_resetModelWidgetPosAction;
     QAction *m_toggleWireframeAction;
     QAction *m_toggleUvCheckAction;
-    QAction *m_showMotionsListAction;
+    QAction *m_toggleRotationAction;
+    QAction *m_toggleColorAction;
+    bool m_modelRemoveColor = false;
     
     QMenu *m_windowMenu;
     QAction *m_showPartsListAction;

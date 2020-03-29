@@ -26,6 +26,7 @@ public:
     QImage *takeResultTextureAmbientOcclusionImage();
     Outcome *takeOutcome();
     MeshLoader *takeResultMesh();
+    bool hasTransparencySettings();
     void addPartColorMap(QUuid partId, const QImage *image, float tileScale);
     void addPartNormalMap(QUuid partId, const QImage *image, float tileScale);
     void addPartMetalnessMap(QUuid partId, const QImage *image, float tileScale);
@@ -37,7 +38,6 @@ signals:
 public slots:
     void process();
 public:
-    static int m_textureSize;
     static QColor m_defaultTextureColor;
 private:
     void prepare();
@@ -60,6 +60,8 @@ private:
     std::map<QUuid, std::pair<QImage, float>> m_partAmbientOcclusionTextureMap;
     std::set<QUuid> m_countershadedPartIds;
     Snapshot *m_snapshot;
+    bool m_hasTransparencySettings;
+    int m_textureSize;
 };
 
 #endif

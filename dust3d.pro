@@ -4,7 +4,12 @@ DEFINES += NDEBUG
 DEFINES += QT_MESSAGELOGCONTEXT
 RESOURCES += resources.qrc
 
-LANGUAGES = zh_CN
+LANGUAGES = zh_CN\
+            es_AR\
+			it_IT
+
+OBJECTS_DIR=obj
+MOC_DIR=moc
 
 ############## Generate .qm from .ts #######################
 
@@ -45,6 +50,10 @@ macx {
 ##########################################################
 
 win32 {
+	CONFIG += force_debug_info
+}
+
+win32 {
 	RC_FILE = dust3d.rc
 }
 
@@ -57,16 +66,16 @@ macx {
 }
 
 isEmpty(HUMAN_VERSION) {
-	HUMAN_VERSION = "1.0.0-beta.29"
+	HUMAN_VERSION = "1.0.0-rc.4"
 }
 isEmpty(VERSION) {
-	VERSION = 1.0.0.29
+	VERSION = 1.0.0.34
 }
 
 HOMEPAGE_URL = "https://dust3d.org/"
 REPOSITORY_URL = "https://github.com/huxingyi/dust3d"
 ISSUES_URL = "https://github.com/huxingyi/dust3d/issues"
-REFERENCE_GUIDE_URL = "http://docs.dust3d.org"
+REFERENCE_GUIDE_URL = "https://docs.dust3d.org"
 UPDATES_CHECKER_URL = "https://dust3d.org/dust3d-updateinfo.xml"
 
 PLATFORM = "Unknown"
@@ -118,6 +127,7 @@ unix:!macx {
 
 win32 {
 	QMAKE_CXXFLAGS += /O2
+	QMAKE_CXXFLAGS += /bigobj
 }
 
 include(thirdparty/QtAwesome/QtAwesome/QtAwesome.pri)
@@ -343,14 +353,8 @@ HEADERS += src/uvunwrap.h
 SOURCES += src/triangletangentresolve.cpp
 HEADERS += src/triangletangentresolve.h
 
-SOURCES += src/animalrigger.cpp
-HEADERS += src/animalrigger.h
-
 SOURCES += src/animalposer.cpp
 HEADERS += src/animalposer.h
-
-SOURCES += src/riggerconstruct.cpp
-HEADERS += src/riggerconstruct.h
 
 SOURCES += src/poserconstruct.cpp
 HEADERS += src/poserconstruct.h
@@ -363,6 +367,9 @@ HEADERS += src/posedocument.h
 
 SOURCES += src/combinemode.cpp
 HEADERS += src/combinemode.h
+
+SOURCES += src/polycount.cpp
+HEADERS += src/polycount.h
 
 SOURCES += src/cutdocument.cpp
 HEADERS += src/cutdocument.h
@@ -429,12 +436,6 @@ HEADERS += src/proceduralanimation.h
 SOURCES += src/boundingboxmesh.cpp
 HEADERS += src/boundingboxmesh.h
 
-SOURCES += src/triangleislandsresolve.cpp
-HEADERS += src/triangleislandsresolve.h
-
-SOURCES += src/triangleislandslink.cpp
-HEADERS += src/triangleislandslink.h
-
 SOURCES += src/gridmeshbuilder.cpp
 HEADERS += src/gridmeshbuilder.h
 
@@ -477,9 +478,68 @@ HEADERS += src/triangulatefaces.h
 SOURCES += src/booleanmesh.cpp
 HEADERS += src/booleanmesh.h
 
+SOURCES += src/imageskeletonextractor.cpp
+HEADERS += src/imageskeletonextractor.h
+
+SOURCES += src/contourtopartconverter.cpp
+HEADERS += src/contourtopartconverter.h
+
+SOURCES += src/remesher.cpp
+HEADERS += src/remesher.h
+
+SOURCES += src/clothsimulator.cpp
+HEADERS += src/clothsimulator.h
+
+SOURCES += src/componentlayer.cpp
+HEADERS += src/componentlayer.h
+
+SOURCES += src/isotropicremesh.cpp
+HEADERS += src/isotropicremesh.h
+
+SOURCES += src/clothforce.cpp
+HEADERS += src/clothforce.h
+
+SOURCES += src/projectfacestonodes.cpp
+HEADERS += src/projectfacestonodes.h
+
+SOURCES += src/simulateclothmeshes.cpp
+HEADERS += src/simulateclothmeshes.h
+
+SOURCES += src/ddsfile.cpp
+HEADERS += src/ddsfile.h
+
+SOURCES += src/fileforever.cpp
+HEADERS += src/fileforever.h
+
 SOURCES += src/main.cpp
 
 HEADERS += src/version.h
+
+INCLUDEPATH += thirdparty/FastMassSpring/ClothApp
+SOURCES += thirdparty/FastMassSpring/ClothApp/MassSpringSolver.cpp
+HEADERS += thirdparty/FastMassSpring/ClothApp/MassSpringSolver.h
+
+INCLUDEPATH += thirdparty/instant-meshes
+INCLUDEPATH += thirdparty/instant-meshes/instant-meshes-dust3d/src
+INCLUDEPATH += thirdparty/instant-meshes/instant-meshes-dust3d/ext/tbb/include
+INCLUDEPATH += thirdparty/instant-meshes/instant-meshes-dust3d/ext/dset
+INCLUDEPATH += thirdparty/instant-meshes/instant-meshes-dust3d/ext/pss
+INCLUDEPATH += thirdparty/instant-meshes/instant-meshes-dust3d/ext/pcg32
+INCLUDEPATH += thirdparty/instant-meshes/instant-meshes-dust3d/ext/rply
+INCLUDEPATH += thirdparty/instant-meshes/instant-meshes-dust3d/ext/half
+unix {
+	SOURCES += thirdparty/instant-meshes/instant-meshes-api.cpp
+	LIBS += -Lthirdparty/instant-meshes/build -linstant-meshes
+	LIBS += -Lthirdparty/instant-meshes/build/ext_build/tbb -ltbb_static
+	unix:!macx {
+		LIBS += -ldl
+	}
+}
+win32 {
+	DEFINES += _USE_MATH_DEFINES
+	LIBS += -Lthirdparty/instant-meshes/build/RelWithDebInfo -linstant-meshes
+	LIBS += -Lthirdparty/instant-meshes/build/ext_build/tbb/RelWithDebInfo -ltbb
+}
 
 INCLUDEPATH += thirdparty/bullet3/src
 
@@ -515,8 +575,8 @@ HEADERS += thirdparty/bullet3/src/BulletCollision/CollisionShapes/btConvexShape.
 SOURCES += thirdparty/bullet3/src/BulletCollision/CollisionShapes/btConvexInternalShape.cpp
 HEADERS += thirdparty/bullet3/src/BulletCollision/CollisionShapes/btConvexInternalShape.h
 
-SOURCES += thirdparty/bullet3/src/BulletDynamics/ConstraintSolver/btHingeConstraint.cpp
-HEADERS += thirdparty/bullet3/src/BulletDynamics/ConstraintSolver/btHingeConstraint.h
+SOURCES += thirdparty/bullet3/src/BulletDynamics/ConstraintSolver/btGeneric6DofConstraint.cpp
+HEADERS += thirdparty/bullet3/src/BulletDynamics/ConstraintSolver/btGeneric6DofConstraint.h
 
 SOURCES += thirdparty/bullet3/src/BulletDynamics/ConstraintSolver/btConeTwistConstraint.cpp
 HEADERS += thirdparty/bullet3/src/BulletDynamics/ConstraintSolver/btConeTwistConstraint.h
@@ -661,9 +721,6 @@ HEADERS += thirdparty/bullet3/src/BulletCollision/CollisionDispatch/SphereTriang
 
 SOURCES += thirdparty/bullet3/src/BulletCollision/CollisionDispatch/btHashedSimplePairCache.cpp
 HEADERS += thirdparty/bullet3/src/BulletCollision/CollisionDispatch/btHashedSimplePairCache.h
-
-SOURCES += thirdparty/bullet3/src/BulletDynamics/ConstraintSolver/btGeneric6DofConstraint.cpp
-HEADERS += thirdparty/bullet3/src/BulletDynamics/ConstraintSolver/btGeneric6DofConstraint.h
 
 SOURCES += thirdparty/bullet3/src/BulletDynamics/ConstraintSolver/btPoint2PointConstraint.cpp
 HEADERS += thirdparty/bullet3/src/BulletDynamics/ConstraintSolver/btPoint2PointConstraint.h

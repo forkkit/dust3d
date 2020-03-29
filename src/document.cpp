@@ -7,7 +7,7 @@
 #include <QApplication>
 #include <QVector3D>
 #include <functional>
-#include <QBuffer>
+#include <QtCore/qbuffer.h>
 #include <QElapsedTimer>
 #include <queue>
 #include "document.h"
@@ -19,8 +19,11 @@
 #include "scriptrunner.h"
 #include "mousepicker.h"
 #include "imageforever.h"
+#include "contourtopartconverter.h"
 
 unsigned long Document::m_maxSnapshot = 1000;
+const float Component::defaultClothStiffness = 0.5f;
+const size_t Component::defaultClothIteration = 350;
 
 Document::Document() :
     SkeletonDocument(),
@@ -34,8 +37,10 @@ Document::Document() :
     textureMetalnessImage(nullptr),
     textureRoughnessImage(nullptr),
     textureAmbientOcclusionImage(nullptr),
+    textureHasTransparencySettings(false),
     rigType(RigType::None),
     weldEnabled(true),
+    polyCount(PolyCount::Original),
     // private
     m_isResultMeshObsolete(false),
     m_meshGenerator(nullptr),
@@ -52,7 +57,6 @@ Document::Document() :
     m_postProcessedOutcome(new Outcome),
     m_resultTextureMesh(nullptr),
     m_textureImageUpdateVersion(0),
-    m_sharedContextWidget(nullptr),
     m_allPositionRelatedLocksEnabled(true),
     m_smoothNormal(!Preferences::instance().flatShading()),
     m_rigGenerator(nullptr),
@@ -77,6 +81,7 @@ Document::Document() :
 {
     connect(&Preferences::instance(), &Preferences::partColorChanged, this, &Document::applyPreferencePartColorChange);
     connect(&Preferences::instance(), &Preferences::flatShadingChanged, this, &Document::applyPreferenceFlatShadingChange);
+    connect(&Preferences::instance(), &Preferences::textureSizeChanged, this, &Document::applyPreferenceTextureSizeChange);
 }
 
 void Document::applyPreferencePartColorChange()
@@ -88,6 +93,11 @@ void Document::applyPreferenceFlatShadingChange()
 {
     m_smoothNormal = !Preferences::instance().flatShading();
     regenerateMesh();
+}
+
+void Document::applyPreferenceTextureSizeChange()
+{
+    generateTexture();
 }
 
 Document::~Document()
@@ -324,6 +334,28 @@ void Document::addNode(float x, float y, float z, float radius, QUuid fromNodeId
     createNode(QUuid::createUuid(), x, y, z, radius, fromNodeId);
 }
 
+void Document::addPartByPolygons(const QPolygonF &mainProfile, const QPolygonF &sideProfile, const QSizeF &canvasSize)
+{
+    if (mainProfile.empty() || sideProfile.empty())
+        return;
+    
+    QThread *thread = new QThread;
+    ContourToPartConverter *contourToPartConverter = new ContourToPartConverter(mainProfile, sideProfile, canvasSize);
+    contourToPartConverter->moveToThread(thread);
+    connect(thread, &QThread::started, contourToPartConverter, &ContourToPartConverter::process);
+    connect(contourToPartConverter, &ContourToPartConverter::finished, this, [=]() {
+        const auto &snapshot = contourToPartConverter->getSnapshot();
+        if (!snapshot.nodes.empty()) {
+            addFromSnapshot(snapshot, true);
+            saveSnapshot();
+        }
+        delete contourToPartConverter;
+    });
+    connect(contourToPartConverter, &ContourToPartConverter::finished, thread, &QThread::quit);
+    connect(thread, &QThread::finished, thread, &QThread::deleteLater);
+    thread->start();
+}
+
 void Document::addNodeWithId(QUuid nodeId, float x, float y, float z, float radius, QUuid fromNodeId)
 {
     createNode(nodeId, x, y, z, radius, fromNodeId);
@@ -494,9 +526,22 @@ void Document::setPoseFrames(QUuid poseId, std::vector<std::pair<std::map<QStrin
     }
     findPoseResult->second.frames = frames;
     findPoseResult->second.dirty = true;
+    bool foundMotion = false;
+    for (auto &it: motionMap) {
+        for (const auto &clip: it.second.clips) {
+            if (poseId == clip.linkToId) {
+                it.second.dirty = true;
+                foundMotion = true;
+                break;
+            }
+        }
+    }
     emit posesChanged();
     emit poseFramesChanged(poseId);
     emit optionsChanged();
+    if (foundMotion) {
+        emit motionsChanged();
+    }
 }
 
 void Document::setPoseTurnaroundImageId(QUuid poseId, QUuid imageId)
@@ -634,6 +679,8 @@ void Document::addEdge(QUuid fromNodeId, QUuid toNodeId)
 
 void Document::checkPartGrid(QUuid partId)
 {
+    return;
+    /*
     SkeletonPart *part = (SkeletonPart *)findPart(partId);
     if (nullptr == part)
         return;
@@ -652,6 +699,7 @@ void Document::checkPartGrid(QUuid partId)
     part->gridded = isGrid;
     part->dirty = true;
     emit partGridStateChanged(partId);
+    */
 }
 
 void Document::updateLinkedPart(QUuid oldPartId, QUuid newPartId)
@@ -1118,8 +1166,8 @@ void Document::toSnapshot(Snapshot *snapshot, const std::set<QUuid> &limitNodeId
                 part["materialId"] = partIt.second.materialId.toString();
             if (partIt.second.countershaded)
                 part["countershaded"] = "true";
-            if (partIt.second.gridded)
-                part["gridded"] = "true";
+            //if (partIt.second.gridded)
+            //    part["gridded"] = "true";
             snapshot->parts[part["id"]] = part;
         }
         for (const auto &nodeIt: nodeMap) {
@@ -1178,6 +1226,18 @@ void Document::toSnapshot(Snapshot *snapshot, const std::set<QUuid> &limitNodeId
                 component["smoothAll"] = QString::number(componentIt.second.smoothAll);
             if (componentIt.second.smoothSeamAdjusted())
                 component["smoothSeam"] = QString::number(componentIt.second.smoothSeam);
+            if (componentIt.second.polyCount != PolyCount::Original)
+                component["polyCount"] = PolyCountToString(componentIt.second.polyCount);
+            if (componentIt.second.layer != ComponentLayer::Body)
+                component["layer"] = ComponentLayerToString(componentIt.second.layer);
+            if (componentIt.second.clothStiffnessAdjusted())
+                component["clothStiffness"] = QString::number(componentIt.second.clothStiffness);
+            if (componentIt.second.clothIterationAdjusted())
+                component["clothIteration"] = QString::number(componentIt.second.clothIteration);
+            if (componentIt.second.clothForceAdjusted())
+                component["clothForce"] = ClothForceToString(componentIt.second.clothForce);
+            if (componentIt.second.clothOffsetAdjusted())
+                component["clothOffset"] = QString::number(componentIt.second.clothOffset);
             QStringList childIdList;
             for (const auto &childId: componentIt.second.childrenIds) {
                 childIdList.append(childId.toString());
@@ -1292,6 +1352,8 @@ void Document::toSnapshot(Snapshot *snapshot, const std::set<QUuid> &limitNodeId
         canvas["originY"] = QString::number(getOriginY());
         canvas["originZ"] = QString::number(getOriginZ());
         canvas["rigType"] = RigTypeToString(rigType);
+        if (this->polyCount != PolyCount::Original)
+            canvas["polyCount"] = PolyCountToString(this->polyCount);
         snapshot->canvas = canvas;
     }
 }
@@ -1381,74 +1443,12 @@ void Document::createSinglePartFromEdges(const std::vector<QVector3D> &nodes,
     emit skeletonChanged();
 }
 
-void Document::createFromNodesAndEdges(const std::vector<QVector3D> &nodes,
-        const std::vector<std::pair<size_t, size_t>> &edges)
-{
-    std::map<size_t, std::vector<size_t>> edgeLinks;
-    for (const auto &it: edges) {
-        edgeLinks[it.first].push_back(it.second);
-        edgeLinks[it.second].push_back(it.first);
-    }
-    if (edgeLinks.empty())
-        return;
-    std::vector<std::set<size_t>> islands;
-    std::set<size_t> visited;
-    for (size_t i = 0; i < nodes.size(); ++i) {
-        std::set<size_t> island;
-        std::queue<size_t> waitVertices;
-        waitVertices.push(i);
-        while (!waitVertices.empty()) {
-            size_t vertexIndex = waitVertices.front();
-            waitVertices.pop();
-            if (visited.find(vertexIndex) == visited.end()) {
-                visited.insert(vertexIndex);
-                island.insert(vertexIndex);
-            }
-            auto findLink = edgeLinks.find(vertexIndex);
-            if (findLink == edgeLinks.end()) {
-                continue;
-            }
-            for (const auto &it: findLink->second) {
-                if (visited.find(it) == visited.end())
-                    waitVertices.push(it);
-            }
-        }
-        if (!island.empty())
-            islands.push_back(island);
-    }
-    
-    std::map<size_t, size_t> vertexIslandMap;
-    for (size_t islandIndex = 0; islandIndex < islands.size(); ++islandIndex) {
-        const auto &island = islands[islandIndex];
-        for (const auto &it: island)
-            vertexIslandMap.insert({it, islandIndex});
-    }
-    
-    std::vector<std::vector<std::pair<size_t, size_t>>> edgesGroupByIsland(islands.size());
-    for (const auto &it: edges) {
-        auto findFirstVertex = vertexIslandMap.find(it.first);
-        if (findFirstVertex != vertexIslandMap.end()) {
-            edgesGroupByIsland[findFirstVertex->second].push_back(it);
-            continue;
-        }
-        auto findSecondVertex = vertexIslandMap.find(it.second);
-        if (findSecondVertex != vertexIslandMap.end()) {
-            edgesGroupByIsland[findSecondVertex->second].push_back(it);
-            continue;
-        }
-    }
-    
-    for (size_t islandIndex = 0; islandIndex < islands.size(); ++islandIndex) {
-        const auto &islandEdges = edgesGroupByIsland[islandIndex];
-        createSinglePartFromEdges(nodes, islandEdges);
-    }
-}
-
 void Document::addFromSnapshot(const Snapshot &snapshot, bool fromPaste)
 {
     bool isOriginChanged = false;
     bool isRigTypeChanged = false;
     if (!fromPaste) {
+        this->polyCount = PolyCountFromString(valueOfKeyInMapOrEmpty(snapshot.canvas, "polyCount").toUtf8().constData());
         const auto &originXit = snapshot.canvas.find("originX");
         const auto &originYit = snapshot.canvas.find("originY");
         const auto &originZit = snapshot.canvas.find("originZ");
@@ -1522,7 +1522,12 @@ void Document::addFromSnapshot(const Snapshot &snapshot, bool fromPaste)
         part.id = newUuid;
         oldNewIdMap[QUuid(partKv.first)] = part.id;
         part.name = valueOfKeyInMapOrEmpty(partKv.second, "name");
-        part.visible = isTrueValueString(valueOfKeyInMapOrEmpty(partKv.second, "visible"));
+        const auto &visibleIt = partKv.second.find("visible");
+        if (visibleIt != partKv.second.end()) {
+            part.visible = isTrueValueString(visibleIt->second);
+        } else {
+            part.visible = true;
+        }
         part.locked = isTrueValueString(valueOfKeyInMapOrEmpty(partKv.second, "locked"));
         part.subdived = isTrueValueString(valueOfKeyInMapOrEmpty(partKv.second, "subdived"));
         part.disabled = isTrueValueString(valueOfKeyInMapOrEmpty(partKv.second, "disabled"));
@@ -1574,7 +1579,7 @@ void Document::addFromSnapshot(const Snapshot &snapshot, bool fromPaste)
         if (materialIdIt != partKv.second.end())
             part.materialId = oldNewIdMap[QUuid(materialIdIt->second)];
         part.countershaded = isTrueValueString(valueOfKeyInMapOrEmpty(partKv.second, "countershaded"));
-        part.gridded = isTrueValueString(valueOfKeyInMapOrEmpty(partKv.second, "gridded"));;
+        //part.gridded = isTrueValueString(valueOfKeyInMapOrEmpty(partKv.second, "gridded"));;
         newAddedPartIds.insert(part.id);
     }
     for (const auto &it: cutFaceLinkedIdModifyMap) {
@@ -1676,6 +1681,20 @@ void Document::addFromSnapshot(const Snapshot &snapshot, bool fromPaste)
         const auto &smoothSeamIt = componentKv.second.find("smoothSeam");
         if (smoothSeamIt != componentKv.second.end())
             component.setSmoothSeam(smoothSeamIt->second.toFloat());
+        component.polyCount = PolyCountFromString(valueOfKeyInMapOrEmpty(componentKv.second, "polyCount").toUtf8().constData());
+        component.layer = ComponentLayerFromString(valueOfKeyInMapOrEmpty(componentKv.second, "layer").toUtf8().constData());
+        auto findClothStiffness = componentKv.second.find("clothStiffness");
+        if (findClothStiffness != componentKv.second.end())
+            component.clothStiffness = findClothStiffness->second.toFloat();
+        auto findClothIteration = componentKv.second.find("clothIteration");
+        if (findClothIteration != componentKv.second.end())
+            component.clothIteration = findClothIteration->second.toUInt();
+        auto findClothForce = componentKv.second.find("clothForce");
+        if (findClothForce != componentKv.second.end())
+            component.clothForce = ClothForceFromString(valueOfKeyInMapOrEmpty(componentKv.second, "clothForce").toUtf8().constData());
+        auto findClothOffset = componentKv.second.find("clothOffset");
+        if (findClothOffset != componentKv.second.end())
+            component.clothOffset = valueOfKeyInMapOrEmpty(componentKv.second, "clothOffset").toFloat();
         //qDebug() << "Add component:" << component.id << " old:" << componentKv.first << "name:" << component.name;
         if ("partId" == linkDataType) {
             QUuid partId = oldNewIdMap[QUuid(linkData)];
@@ -2002,6 +2021,8 @@ void Document::generateMesh()
         return;
     }
     
+    emit meshGenerating();
+    
     qDebug() << "Mesh generating..";
     
     settleOrigin();
@@ -2025,7 +2046,6 @@ void Document::generateMesh()
     connect(m_meshGenerator, &MeshGenerator::finished, this, &Document::meshReady);
     connect(m_meshGenerator, &MeshGenerator::finished, thread, &QThread::quit);
     connect(thread, &QThread::finished, thread, &QThread::deleteLater);
-    emit meshGenerating();
     thread->start();
 }
 
@@ -2037,6 +2057,7 @@ void Document::generateTexture()
     }
     
     qDebug() << "Texture guide generating..";
+    emit textureGenerating();
     
     m_isTextureObsolete = false;
     
@@ -2050,7 +2071,6 @@ void Document::generateTexture()
     connect(m_textureGenerator, &TextureGenerator::finished, this, &Document::textureReady);
     connect(m_textureGenerator, &TextureGenerator::finished, thread, &QThread::quit);
     connect(thread, &QThread::finished, thread, &QThread::deleteLater);
-    emit textureGenerating();
     thread->start();
 }
 
@@ -2086,6 +2106,8 @@ void Document::textureReady()
     delete m_resultTextureMesh;
     m_resultTextureMesh = m_textureGenerator->takeResultMesh();
     
+    textureHasTransparencySettings = m_textureGenerator->hasTransparencySettings();
+    
     //addToolToMesh(m_resultTextureMesh);
     
     m_textureImageUpdateVersion++;
@@ -2119,6 +2141,7 @@ void Document::postProcess()
     }
 
     qDebug() << "Post processing..";
+    emit postProcessing();
 
     QThread *thread = new QThread;
     m_postProcessor = new MeshResultPostProcessor(*m_currentOutcome);
@@ -2127,7 +2150,6 @@ void Document::postProcess()
     connect(m_postProcessor, &MeshResultPostProcessor::finished, this, &Document::postProcessedMeshResultReady);
     connect(m_postProcessor, &MeshResultPostProcessor::finished, thread, &QThread::quit);
     connect(thread, &QThread::finished, thread, &QThread::deleteLater);
-    emit postProcessing();
     thread->start();
 }
 
@@ -2458,6 +2480,99 @@ void Document::setComponentExpandState(QUuid componentId, bool expanded)
     component->second.expanded = expanded;
     emit componentExpandStateChanged(componentId);
     emit optionsChanged();
+}
+
+void Document::setComponentPolyCount(QUuid componentId, PolyCount count)
+{
+    if (componentId.isNull()) {
+        if (polyCount == count)
+            return;
+        polyCount = count;
+        emit componentPolyCountChanged(componentId);
+        emit skeletonChanged();
+        return;
+    }
+
+    Component *component = (Component *)findComponent(componentId);
+    if (nullptr == component)
+        return;
+    if (component->polyCount == count)
+        return;
+    
+    component->polyCount = count;
+    component->dirty = true;
+    emit componentPolyCountChanged(componentId);
+    emit skeletonChanged();
+}
+
+void Document::setComponentLayer(QUuid componentId, ComponentLayer layer)
+{
+    Component *component = (Component *)findComponent(componentId);
+    if (nullptr == component)
+        return;
+    if (component->layer == layer)
+        return;
+    
+    component->layer = layer;
+    component->dirty = true;
+    emit componentLayerChanged(componentId);
+    emit skeletonChanged();
+}
+
+void Document::setComponentClothStiffness(QUuid componentId, float stiffness)
+{
+    Component *component = (Component *)findComponent(componentId);
+    if (nullptr == component)
+        return;
+    if (qFuzzyCompare(component->clothStiffness, stiffness))
+        return;
+    
+    component->clothStiffness = stiffness;
+    component->dirty = true;
+    emit componentClothStiffnessChanged(componentId);
+    emit skeletonChanged();
+}
+
+void Document::setComponentClothIteration(QUuid componentId, size_t iteration)
+{
+    Component *component = (Component *)findComponent(componentId);
+    if (nullptr == component)
+        return;
+    if (component->clothIteration == iteration)
+        return;
+    
+    component->clothIteration = iteration;
+    component->dirty = true;
+    emit componentClothIterationChanged(componentId);
+    emit skeletonChanged();
+}
+
+void Document::setComponentClothForce(QUuid componentId, ClothForce force)
+{
+    Component *component = (Component *)findComponent(componentId);
+    if (nullptr == component)
+        return;
+    if (component->clothForce == force)
+        return;
+    
+    component->clothForce = force;
+    component->dirty = true;
+    emit componentClothForceChanged(componentId);
+    emit skeletonChanged();
+}
+
+void Document::setComponentClothOffset(QUuid componentId, float offset)
+{
+    Component *component = (Component *)findComponent(componentId);
+    if (nullptr == component)
+        return;
+    if (qFuzzyCompare(component->clothOffset, offset))
+        return;
+    
+    component->clothOffset = offset;
+    component->dirty = true;
+    emit componentClothOffsetChanged(componentId);
+    emit skeletonChanged();
 }
 
 void Document::createNewComponentAndMoveThisIn(QUuid componentId)
@@ -3195,11 +3310,6 @@ void Document::checkExportReadyState()
         emit exportReady();
 }
 
-void Document::setSharedContextWidget(QOpenGLWidget *sharedContextWidget)
-{
-    m_sharedContextWidget = sharedContextWidget;
-}
-
 void Document::collectComponentDescendantParts(QUuid componentId, std::vector<QUuid> &partIds) const
 {
     const Component *component = findComponent(componentId);
@@ -3724,6 +3834,16 @@ bool Document::isMeshGenerating() const
     return nullptr != m_meshGenerator;
 }
 
+bool Document::isPostProcessing() const
+{
+    return nullptr != m_postProcessor;
+}
+
+bool Document::isTextureGenerating() const
+{
+    return nullptr != m_textureGenerator;
+}
+
 void Document::copyNodes(std::set<QUuid> nodeIdSet) const
 {
     Snapshot snapshot;
@@ -3947,61 +4067,4 @@ void Document::stopPaint(void)
 void Document::setMousePickMaskNodeIds(const std::set<QUuid> &nodeIds)
 {
     m_mousePickMaskNodeIds = nodeIds;
-}
-
-void Document::createGriddedPartsFromNodes(const std::set<QUuid> &nodeIds)
-{
-    if (nullptr == m_currentOutcome)
-        return;
-    
-    const auto &vertices = m_currentOutcome->vertices;
-    const auto &vertexSourceNodes = m_currentOutcome->vertexSourceNodes;
-    std::set<size_t> selectedVertices;
-    for (size_t i = 0; i < vertexSourceNodes.size(); ++i) {
-        if (nodeIds.find(vertexSourceNodes[i].second) == nodeIds.end())
-            continue;
-        selectedVertices.insert(i);
-    }
-    
-    std::vector<QVector3D> newVertices;
-    std::map<size_t, size_t> oldToNewMap;
-    std::vector<std::pair<size_t, size_t>> newEdges;
-    
-    auto oldToNew = [&](size_t oldIndex) {
-        auto findNewIndex = oldToNewMap.find(oldIndex);
-        if (findNewIndex != oldToNewMap.end())
-            return findNewIndex->second;
-        size_t newIndex = newVertices.size();
-        newVertices.push_back(vertices[oldIndex]);
-        oldToNewMap.insert({oldIndex, newIndex});
-        return newIndex;
-    };
-    
-    std::set<std::pair<size_t, size_t>> visitedOldEdges;
-    const auto &faces = m_currentOutcome->triangleAndQuads;
-    for (const auto &face: faces) {
-        bool isFaceSelected = false;
-        for (size_t i = 0; i < face.size(); ++i) {
-            if (selectedVertices.find(face[i]) != selectedVertices.end()) {
-                isFaceSelected = true;
-                break;
-            }
-        }
-        if (!isFaceSelected)
-            continue;
-        for (size_t i = 0; i < face.size(); ++i) {
-            size_t j = (i + 1) % face.size();
-            auto oldEdge = std::make_pair(face[i], face[j]);
-            if (visitedOldEdges.find(oldEdge) != visitedOldEdges.end())
-                continue;
-            visitedOldEdges.insert(oldEdge);
-            visitedOldEdges.insert(std::make_pair(oldEdge.second, oldEdge.first));
-            newEdges.push_back({
-                oldToNew(oldEdge.first),
-                oldToNew(oldEdge.second)
-            });
-        }
-    }
-    
-    createFromNodesAndEdges(newVertices, newEdges);
 }

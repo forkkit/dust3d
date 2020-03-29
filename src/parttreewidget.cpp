@@ -15,6 +15,7 @@
 #include "partwidget.h"
 #include "skeletongraphicswidget.h"
 #include "floatnumberwidget.h"
+#include "intnumberwidget.h"
 
 PartTreeWidget::PartTreeWidget(const Document *document, QWidget *parent) :
     QTreeWidget(parent),
@@ -30,8 +31,6 @@ PartTreeWidget::PartTreeWidget(const Document *document, QWidget *parent) :
     
     setColumnCount(1);
     setHeaderHidden(true);
-    
-    m_componentItemMap[QUuid()] = invisibleRootItem();
     
     setContextMenuPolicy(Qt::CustomContextMenu);
     //setIconSize(QSize(Theme::miniIconFontSize, Theme::miniIconFontSize));
@@ -61,7 +60,20 @@ PartTreeWidget::PartTreeWidget(const Document *document, QWidget *parent) :
     gradient.setColorAt(1, Qt::transparent);
     m_hightlightedPartBackground = QBrush(gradient);
     
-    connect(this, &QTreeWidget::customContextMenuRequested, this, &PartTreeWidget::showContextMenu);
+    QTreeWidgetItem *item = new QTreeWidgetItem(QStringList(tr("Root")));
+    invisibleRootItem()->addChild(item);
+    item->setData(0, Qt::UserRole, QVariant(QUuid().toString()));
+    item->setChildIndicatorPolicy(QTreeWidgetItem::ShowIndicator);
+    item->setExpanded(true);
+    item->setFlags((item->flags() | Qt::ItemIsEnabled) & ~(Qt::ItemIsSelectable));
+    m_rootItem = item;
+    m_componentItemMap[QUuid()] = item;
+    m_firstSelect = true;
+    selectComponent(QUuid());
+    
+    connect(this, &QTreeWidget::customContextMenuRequested, this, [&](const QPoint &pos) {
+        showContextMenu(pos);
+    });
     connect(this, &QTreeWidget::itemChanged, this, &PartTreeWidget::groupChanged);
     connect(this, &QTreeWidget::itemExpanded, this, &PartTreeWidget::groupExpanded);
     connect(this, &QTreeWidget::itemCollapsed, this, &PartTreeWidget::groupCollapsed);
@@ -69,6 +81,11 @@ PartTreeWidget::PartTreeWidget(const Document *document, QWidget *parent) :
 
 void PartTreeWidget::selectComponent(QUuid componentId, bool multiple)
 {
+    if (m_firstSelect) {
+        m_firstSelect = false;
+        updateComponentSelectState(QUuid(), true);
+        return;
+    }
     if (multiple) {
         if (!m_currentSelectedComponentId.isNull()) {
             m_selectedComponentIds.insert(m_currentSelectedComponentId);
@@ -97,13 +114,13 @@ void PartTreeWidget::selectComponent(QUuid componentId, bool multiple)
         m_selectedComponentIds.clear();
     }
     if (m_currentSelectedComponentId != componentId) {
-        if (!m_currentSelectedComponentId.isNull()) {
+        //if (!m_currentSelectedComponentId.isNull()) {
             updateComponentSelectState(m_currentSelectedComponentId, false);
-        }
+        //}
         m_currentSelectedComponentId = componentId;
-        if (!m_currentSelectedComponentId.isNull()) {
+        //if (!m_currentSelectedComponentId.isNull()) {
             updateComponentSelectState(m_currentSelectedComponentId, true);
-        }
+        //}
         emit currentComponentChanged(m_currentSelectedComponentId);
     }
 }
@@ -122,7 +139,7 @@ void PartTreeWidget::updateComponentSelectState(QUuid componentId, bool selected
     }
     if (!component->linkToPartId.isNull()) {
         auto item = m_partItemMap.find(component->linkToPartId);
-        if (item != m_componentItemMap.end()) {
+        if (item != m_partItemMap.end()) {
             PartWidget *widget = (PartWidget *)itemWidget(item->second, 0);
             // Unnormal state updating call should be called before check state updating call
             widget->updateUnnormalState(component->combineMode != CombineMode::Normal);
@@ -140,72 +157,221 @@ void PartTreeWidget::updateComponentSelectState(QUuid componentId, bool selected
     }
 }
 
-void PartTreeWidget::mousePressEvent(QMouseEvent *event)
+void PartTreeWidget::mouseDoubleClickEvent(QMouseEvent *event)
 {
-    QModelIndex itemIndex = indexAt(event->pos());
-    QTreeView::mousePressEvent(event);
-    if (event->button() == Qt::LeftButton) {
-        bool multiple = QGuiApplication::queryKeyboardModifiers().testFlag(Qt::ControlModifier);
-        if (itemIndex.isValid()) {
-            QTreeWidgetItem *item = itemFromIndex(itemIndex);
-            auto componentId = QUuid(item->data(0, Qt::UserRole).toString());
-            if (QGuiApplication::queryKeyboardModifiers().testFlag(Qt::ShiftModifier)) {
-                if (!m_shiftStartComponentId.isNull()) {
-                    const Component *parent = m_document->findComponentParent(m_shiftStartComponentId);
-                    if (parent) {
-                        if (!parent->childrenIds.empty()) {
-                            bool startAdd = false;
-                            bool stopAdd = false;
-                            std::vector<QUuid> waitQueue;
-                            for (const auto &childId: parent->childrenIds) {
-                                if (m_shiftStartComponentId == childId || componentId == childId) {
-                                    if (startAdd) {
-                                        stopAdd = true;
-                                    } else {
-                                        startAdd = true;
-                                    }
+    delete m_delayedMousePressTimer;
+    m_delayedMousePressTimer = nullptr;
+    
+    QWidget::mouseDoubleClickEvent(event);
+    auto componentIds = collectSelectedComponentIds(event->pos());
+    for (const auto &componentId: componentIds) {
+        std::vector<QUuid> partIds;
+        m_document->collectComponentDescendantParts(componentId, partIds);
+        for (const auto &partId: partIds) {
+            emit addPartToSelection(partId);
+        }
+    }
+    event->accept();
+}
+
+void PartTreeWidget::handleSingleClick(const QPoint &pos)
+{
+    QModelIndex itemIndex = indexAt(pos);
+    
+    auto showMenu = [=]() {
+        delete m_delayedMousePressTimer;
+        m_delayedMousePressTimer = new QTimer(this);
+        m_delayedMousePressTimer->setSingleShot(true);
+        m_delayedMousePressTimer->setInterval(200);
+        connect(m_delayedMousePressTimer, &QTimer::timeout, this, [=]() {
+            showContextMenu(pos, true);
+        });
+        m_delayedMousePressTimer->start();
+    };
+    
+    bool multiple = QGuiApplication::queryKeyboardModifiers().testFlag(Qt::ControlModifier);
+    if (itemIndex.isValid()) {
+        QTreeWidgetItem *item = itemFromIndex(itemIndex);
+        auto componentId = QUuid(item->data(0, Qt::UserRole).toString());
+        if (QGuiApplication::queryKeyboardModifiers().testFlag(Qt::ShiftModifier)) {
+            if (!m_shiftStartComponentId.isNull()) {
+                const Component *parent = m_document->findComponentParent(m_shiftStartComponentId);
+                if (parent) {
+                    if (!parent->childrenIds.empty()) {
+                        bool startAdd = false;
+                        bool stopAdd = false;
+                        std::vector<QUuid> waitQueue;
+                        for (const auto &childId: parent->childrenIds) {
+                            if (m_shiftStartComponentId == childId || componentId == childId) {
+                                if (startAdd) {
+                                    stopAdd = true;
+                                } else {
+                                    startAdd = true;
                                 }
-                                if (startAdd)
-                                    waitQueue.push_back(childId);
-                                if (stopAdd)
-                                    break;
                             }
-                            if (stopAdd && !waitQueue.empty()) {
-                                if (!m_selectedComponentIds.empty()) {
-                                    for (const auto &id: m_selectedComponentIds) {
-                                        updateComponentSelectState(id, false);
-                                    }
-                                    m_selectedComponentIds.clear();
+                            if (startAdd)
+                                waitQueue.push_back(childId);
+                            if (stopAdd)
+                                break;
+                        }
+                        if (stopAdd && !waitQueue.empty()) {
+                            if (!m_selectedComponentIds.empty()) {
+                                for (const auto &id: m_selectedComponentIds) {
+                                    updateComponentSelectState(id, false);
                                 }
-                                if (!m_currentSelectedComponentId.isNull()) {
-                                    m_currentSelectedComponentId = QUuid();
-                                    emit currentComponentChanged(m_currentSelectedComponentId);
-                                }
-                                for (const auto &waitId: waitQueue) {
-                                    selectComponent(waitId, true);
-                                }
+                                m_selectedComponentIds.clear();
+                            }
+                            if (!m_currentSelectedComponentId.isNull()) {
+                                m_currentSelectedComponentId = QUuid();
+                                emit currentComponentChanged(m_currentSelectedComponentId);
+                            }
+                            for (const auto &waitId: waitQueue) {
+                                selectComponent(waitId, true);
                             }
                         }
                     }
                 }
-                return;
-            } else {
-                m_shiftStartComponentId = componentId;
             }
-            selectComponent(componentId, multiple);
+            showMenu();
             return;
+        } else {
+            m_shiftStartComponentId = componentId;
         }
-        if (!multiple)
-            selectComponent(QUuid());
+        selectComponent(componentId, multiple);
+        showMenu();
+        return;
     }
+    if (!multiple)
+        selectComponent(QUuid());
+    
+    showMenu();
 }
 
-void PartTreeWidget::showContextMenu(const QPoint &pos)
+void PartTreeWidget::mousePressEvent(QMouseEvent *event)
+{
+    QTreeView::mousePressEvent(event);
+    
+    if (event->button() != Qt::LeftButton)
+        return;
+    
+    handleSingleClick(event->pos());
+}
+
+void PartTreeWidget::showClothSettingMenu(const QPoint &pos, const QUuid &componentId)
 {
     const Component *component = nullptr;
-    const SkeletonPart *part = nullptr;
-    PartWidget *partWidget = nullptr;
     
+    if (componentId.isNull())
+        return;
+    
+    component = m_document->findComponent(componentId);
+    if (nullptr == component)
+        return;
+    
+    QMenu popupMenu;
+    
+    QWidget *popup = new QWidget;
+    
+    FloatNumberWidget *clothStiffnessWidget = new FloatNumberWidget;
+    clothStiffnessWidget->setItemName(tr("Stiffness"));
+    clothStiffnessWidget->setRange(0.0f, 1.0f);
+    clothStiffnessWidget->setValue(component->clothStiffness);
+    
+    connect(clothStiffnessWidget, &FloatNumberWidget::valueChanged, [=](float value) {
+        emit setComponentClothStiffness(componentId, value);
+        emit groupOperationAdded();
+    });
+    
+    QPushButton *clothStiffnessEraser = new QPushButton(QChar(fa::eraser));
+    Theme::initAwesomeToolButton(clothStiffnessEraser);
+    
+    connect(clothStiffnessEraser, &QPushButton::clicked, [=]() {
+        clothStiffnessWidget->setValue(Component::defaultClothStiffness);
+        emit groupOperationAdded();
+    });
+    
+    QHBoxLayout *clothStiffnessLayout = new QHBoxLayout;
+    clothStiffnessLayout->addWidget(clothStiffnessEraser);
+    clothStiffnessLayout->addWidget(clothStiffnessWidget);
+    
+    IntNumberWidget *clothIterationWidget = new IntNumberWidget;
+    clothIterationWidget->setItemName(tr("Iteration"));
+    clothIterationWidget->setRange(0, 1000);
+    clothIterationWidget->setValue(component->clothIteration);
+    
+    connect(clothIterationWidget, &IntNumberWidget::valueChanged, [=](int value) {
+        //emit setComponentClothIteration(componentId, value);
+        //emit groupOperationAdded();
+    });
+    
+    QPushButton *clothIterationEraser = new QPushButton(QChar(fa::eraser));
+    Theme::initAwesomeToolButton(clothIterationEraser);
+    
+    connect(clothIterationEraser, &QPushButton::clicked, [=]() {
+        clothIterationWidget->setValue(Component::defaultClothIteration);
+        emit groupOperationAdded();
+    });
+    
+    QHBoxLayout *clothIterationLayout = new QHBoxLayout;
+    clothIterationLayout->addWidget(clothIterationEraser);
+    clothIterationLayout->addWidget(clothIterationWidget);
+    
+    FloatNumberWidget *clothOffsetWidget = new FloatNumberWidget;
+    clothOffsetWidget->setItemName(tr("Offset"));
+    clothOffsetWidget->setRange(0.0f, 1.0f);
+    clothOffsetWidget->setValue(component->clothOffset);
+    
+    connect(clothOffsetWidget, &FloatNumberWidget::valueChanged, [=](float value) {
+        emit setComponentClothOffset(componentId, value);
+        emit groupOperationAdded();
+    });
+    
+    QPushButton *clothOffsetEraser = new QPushButton(QChar(fa::eraser));
+    Theme::initAwesomeToolButton(clothOffsetEraser);
+    
+    connect(clothOffsetEraser, &QPushButton::clicked, [=]() {
+        clothOffsetWidget->setValue(0.0);
+        emit groupOperationAdded();
+    });
+    
+    QHBoxLayout *clothOffsetLayout = new QHBoxLayout;
+    clothOffsetLayout->addWidget(clothOffsetEraser);
+    clothOffsetLayout->addWidget(clothOffsetWidget);
+    
+    QComboBox *clothForceSelectBox = new QComboBox;
+    for (size_t i = 0; i < (size_t)ClothForce::Count; ++i) {
+        ClothForce force = (ClothForce)i;
+        clothForceSelectBox->addItem(ClothForceToDispName(force));
+    }
+    clothForceSelectBox->setCurrentIndex((int)component->clothForce);
+    connect(clothForceSelectBox, static_cast<void (QComboBox::*)(int)>(&QComboBox::currentIndexChanged), this, [=](int index) {
+        emit setComponentClothForce(component->id, (ClothForce)index);
+        emit groupOperationAdded();
+    });
+    QFormLayout *clothForceFormLayout = new QFormLayout;
+    clothForceFormLayout->addRow(tr("Force"), clothForceSelectBox);
+    QHBoxLayout *clothForceLayout = new QHBoxLayout;
+    clothForceLayout->addLayout(clothForceFormLayout);
+    clothForceLayout->addStretch();
+    
+    QVBoxLayout *mainLayout = new QVBoxLayout;
+    mainLayout->addLayout(clothStiffnessLayout);
+    //mainLayout->addLayout(clothIterationLayout);
+    mainLayout->addLayout(clothOffsetLayout);
+    mainLayout->addLayout(clothForceLayout);
+    
+    popup->setLayout(mainLayout);
+    
+    QWidgetAction action(this);
+    action.setDefaultWidget(popup);
+    
+    popupMenu.addAction(&action);
+    
+    popupMenu.exec(mapToGlobal(pos));
+}
+
+std::vector<QUuid> PartTreeWidget::collectSelectedComponentIds(const QPoint &pos)
+{
     std::set<QUuid> unorderedComponentIds = m_selectedComponentIds;
     if (!m_currentSelectedComponentId.isNull())
         unorderedComponentIds.insert(m_currentSelectedComponentId);
@@ -224,6 +390,25 @@ void PartTreeWidget::showContextMenu(const QPoint &pos)
     for (const auto &cand: candidates) {
         if (unorderedComponentIds.find(cand) != unorderedComponentIds.end())
             componentIds.push_back(cand);
+    }
+    
+    return componentIds;
+}
+
+void PartTreeWidget::showContextMenu(const QPoint &pos, bool shorted)
+{
+    delete m_delayedMousePressTimer;
+    m_delayedMousePressTimer = nullptr;
+
+    const Component *component = nullptr;
+    const SkeletonPart *part = nullptr;
+    PartWidget *partWidget = nullptr;
+    
+    std::vector<QUuid> componentIds = collectSelectedComponentIds(pos);
+    
+    if (shorted) {
+        if (componentIds.size() > 1)
+            return;
     }
     
     QMenu contextMenu(this);
@@ -269,11 +454,61 @@ void PartTreeWidget::showContextMenu(const QPoint &pos)
             previewLabel->setText(component->name);
         } else if (!componentIds.empty()) {
             previewLabel->setText(tr("(%1 items)").arg(QString::number(componentIds.size())));
+        } else {
+            previewLabel->hide();
         }
         layout->addWidget(previewLabel);
     }
+    QComboBox *polyCountSelectBox = nullptr;
+    if (componentIds.size() <= 1) {
+        polyCountSelectBox = new QComboBox;
+        if (nullptr == component) {
+            for (size_t i = 0; i < (size_t)PolyCount::Count; ++i) {
+                PolyCount count = (PolyCount)i;
+                polyCountSelectBox->addItem(PolyCountToDispName(count));
+            }
+            polyCountSelectBox->setCurrentIndex((int)m_document->polyCount);
+            connect(polyCountSelectBox, static_cast<void (QComboBox::*)(int)>(&QComboBox::currentIndexChanged), this, [=](int index) {
+                emit setComponentPolyCount(QUuid(), (PolyCount)index);
+                emit groupOperationAdded();
+            });
+        } else {
+            for (size_t i = 0; i < (size_t)PolyCount::Count; ++i) {
+                PolyCount count = (PolyCount)i;
+                polyCountSelectBox->addItem(PolyCountToDispName(count));
+            }
+            polyCountSelectBox->setCurrentIndex((int)component->polyCount);
+            connect(polyCountSelectBox, static_cast<void (QComboBox::*)(int)>(&QComboBox::currentIndexChanged), this, [=](int index) {
+                emit setComponentPolyCount(component->id, (PolyCount)index);
+                emit groupOperationAdded();
+            });
+        }
+    }
     QWidget *widget = new QWidget;
     if (nullptr != component) {
+        QPushButton *clothSettingButton = new QPushButton();
+        connect(clothSettingButton, &QPushButton::clicked, this, [=]() {
+            showClothSettingMenu(mapFromGlobal(QCursor::pos()), component->id);
+        });
+        clothSettingButton->setIcon(Theme::awesome()->icon(fa::gear));
+        if (ComponentLayer::Cloth != component->layer)
+            clothSettingButton->hide();
+        QComboBox *componentLayerSelectBox = new QComboBox;
+        for (size_t i = 0; i < (size_t)ComponentLayer::Count; ++i) {
+            ComponentLayer layer = (ComponentLayer)i;
+            componentLayerSelectBox->addItem(ComponentLayerToDispName(layer));
+        }
+        componentLayerSelectBox->setCurrentIndex((int)component->layer);
+        connect(componentLayerSelectBox, static_cast<void (QComboBox::*)(int)>(&QComboBox::currentIndexChanged), this, [=](int index) {
+            clothSettingButton->setVisible(ComponentLayer::Cloth == (ComponentLayer)index);
+            emit setComponentLayer(component->id, (ComponentLayer)index);
+            emit groupOperationAdded();
+        });
+        QHBoxLayout *componentLayerLayout = new QHBoxLayout;
+        componentLayerLayout->addWidget(componentLayerSelectBox);
+        componentLayerLayout->addWidget(clothSettingButton);
+        componentLayerLayout->setStretch(0, 1);
+        
         QComboBox *combineModeSelectBox = new QComboBox;
         for (size_t i = 0; i < (size_t)CombineMode::Count; ++i) {
             CombineMode mode = (CombineMode)i;
@@ -282,6 +517,7 @@ void PartTreeWidget::showContextMenu(const QPoint &pos)
         combineModeSelectBox->setCurrentIndex((int)component->combineMode);
         connect(combineModeSelectBox, static_cast<void (QComboBox::*)(int)>(&QComboBox::currentIndexChanged), this, [=](int index) {
             emit setComponentCombineMode(component->id, (CombineMode)index);
+            emit groupOperationAdded();
         });
         
         QComboBox *partTargetSelectBox = nullptr;
@@ -294,6 +530,7 @@ void PartTreeWidget::showContextMenu(const QPoint &pos)
             partTargetSelectBox->setCurrentIndex((int)part->target);
             connect(partTargetSelectBox, static_cast<void (QComboBox::*)(int)>(&QComboBox::currentIndexChanged), this, [=](int index) {
                 emit setPartTarget(part->id, (PartTarget)index);
+                emit groupOperationAdded();
             });
         }
         
@@ -307,6 +544,7 @@ void PartTreeWidget::showContextMenu(const QPoint &pos)
             partBaseSelectBox->setCurrentIndex((int)part->base);
             connect(partBaseSelectBox, static_cast<void (QComboBox::*)(int)>(&QComboBox::currentIndexChanged), this, [=](int index) {
                 emit setPartBase(part->id, (PartBase)index);
+                emit groupOperationAdded();
             });
         }
         
@@ -317,23 +555,40 @@ void PartTreeWidget::showContextMenu(const QPoint &pos)
         //combineModeLayout->addWidget(combineModeSelectBox);
         
         QFormLayout *componentSettingsLayout = new QFormLayout;
+        if (nullptr != polyCountSelectBox)
+            componentSettingsLayout->addRow(tr("Poly"), polyCountSelectBox);
         if (nullptr != partBaseSelectBox)
             componentSettingsLayout->addRow(tr("Base"), partBaseSelectBox);
         if (nullptr != partTargetSelectBox)
             componentSettingsLayout->addRow(tr("Target"), partTargetSelectBox);
         componentSettingsLayout->addRow(tr("Mode"), combineModeSelectBox);
+        componentSettingsLayout->addRow(tr("Layer"), componentLayerLayout);
     
         QVBoxLayout *newLayout = new QVBoxLayout;
         newLayout->addLayout(layout);
         newLayout->addLayout(componentSettingsLayout);
         widget->setLayout(newLayout);
     } else {
-        widget->setLayout(layout);
+        QFormLayout *componentSettingsLayout = new QFormLayout;
+        if (nullptr != polyCountSelectBox)
+            componentSettingsLayout->addRow(tr("Poly"), polyCountSelectBox);
+        
+        QVBoxLayout *newLayout = new QVBoxLayout;
+        newLayout->addLayout(layout);
+        newLayout->addLayout(componentSettingsLayout);
+        widget->setLayout(newLayout);
     }
     forDisplayPartImage.setDefaultWidget(widget);
-    if (!componentIds.empty()) {
+    //if (!componentIds.empty()) {
         contextMenu.addAction(&forDisplayPartImage);
         contextMenu.addSeparator();
+    //}
+    
+    if (shorted) {
+        auto globalPos = mapToGlobal(pos);
+        globalPos.setX(globalPos.x() - contextMenu.sizeHint().width() - pos.x());
+        contextMenu.exec(globalPos);
+        return;
     }
     
     QAction showAction(tr("Show"), this);
@@ -456,12 +711,14 @@ void PartTreeWidget::showContextMenu(const QPoint &pos)
     
     QAction collapseAllAction(tr("Collapse All"), this);
     connect(&collapseAllAction, &QAction::triggered, [=]() {
+        m_rootItem->setExpanded(false);
         emit collapseAllComponents();
     });
     contextMenu.addAction(&collapseAllAction);
     
     QAction expandAllAction(tr("Expand All"), this);
     connect(&expandAllAction, &QAction::triggered, [=]() {
+        m_rootItem->setExpanded(true);
         emit expandAllComponents();
     });
     contextMenu.addAction(&expandAllAction);
@@ -510,6 +767,7 @@ void PartTreeWidget::showContextMenu(const QPoint &pos)
     contextMenu.addSeparator();
     
     std::vector<QAction *> groupsActions;
+    QAction renameAction(tr("Rename"), this);
     QAction deleteAction(tr("Delete"), this);
     QAction moveToTopAction(tr("Top"), this);
     QAction moveUpAction(tr("Up"), this);
@@ -588,6 +846,17 @@ void PartTreeWidget::showContextMenu(const QPoint &pos)
         };
         addChildGroupsFunc(QUuid(), 0);
         
+        if (nullptr != component && nullptr == part) {
+            auto componentId = component->id;
+            connect(&renameAction, &QAction::triggered, [=]() {
+                auto findItem = m_componentItemMap.find(componentId);
+                if (findItem != m_componentItemMap.end()) {
+                    editItem(findItem->second);
+                }
+            });
+            contextMenu.addAction(&renameAction);
+        }
+        
         contextMenu.addSeparator();
         
         deleteAction.setIcon(Theme::awesome()->icon(fa::trash));
@@ -599,7 +868,9 @@ void PartTreeWidget::showContextMenu(const QPoint &pos)
         contextMenu.addAction(&deleteAction);
     }
     
-    contextMenu.exec(mapToGlobal(pos));
+    auto globalPos = mapToGlobal(pos);
+    globalPos.setX(globalPos.x() - contextMenu.sizeHint().width() - pos.x());
+    contextMenu.exec(globalPos);
     
     for (const auto &action: groupsActions) {
         delete action;
@@ -801,6 +1072,32 @@ void PartTreeWidget::deleteItemChildren(QTreeWidgetItem *item)
 
 void PartTreeWidget::componentChildrenChanged(QUuid componentId)
 {
+    removeComponentDelayedTimer(componentId);
+    
+    QTimer *delayedTimer = new QTimer(this);
+    delayedTimer->setSingleShot(true);
+    delayedTimer->setInterval(200);
+    
+    connect(delayedTimer, &QTimer::timeout, this, [=]() {
+        removeComponentDelayedTimer(componentId);
+        reloadComponentChildren(componentId);
+    });
+    
+    m_delayedComponentTimers.insert({componentId, delayedTimer});
+    delayedTimer->start();
+}
+
+void PartTreeWidget::removeComponentDelayedTimer(const QUuid &componentId)
+{
+    auto findTimer = m_delayedComponentTimers.find(componentId);
+    if (findTimer != m_delayedComponentTimers.end()) {
+        delete findTimer->second;
+        m_delayedComponentTimers.erase(findTimer);
+    }
+}
+
+void PartTreeWidget::reloadComponentChildren(const QUuid &componentId)
+{
     QTreeWidgetItem *parentItem = findComponentItem(componentId);
     if (nullptr == parentItem) {
         qDebug() << "Find component item failed:" << componentId;
@@ -808,23 +1105,14 @@ void PartTreeWidget::componentChildrenChanged(QUuid componentId)
     }
     deleteItemChildren(parentItem);
     addComponentChildrenToItem(componentId, parentItem);
-    
-    // Fix the last item show in the wrong place sometimes
-    int childCount = invisibleRootItem()->childCount();
-    if (childCount > 0) {
-        QTreeWidgetItem *lastItem = invisibleRootItem()->child(childCount - 1);
-        bool isExpanded = lastItem->isExpanded();
-        lastItem->setExpanded(!isExpanded);
-        lastItem->setExpanded(isExpanded);
-    }
 }
 
 void PartTreeWidget::removeAllContent()
 {
-    qDeleteAll(invisibleRootItem()->takeChildren());
+    qDeleteAll(m_rootItem->takeChildren());
     m_partItemMap.clear();
     m_componentItemMap.clear();
-    m_componentItemMap[QUuid()] = invisibleRootItem();
+    m_componentItemMap[QUuid()] = m_rootItem;
 }
 
 void PartTreeWidget::componentRemoved(QUuid componentId)

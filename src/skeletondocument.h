@@ -83,6 +83,7 @@ public:
     }
     float getZ(bool rotated=false) const
     {
+        (void) rotated;
         return m_z;
     }
     void setX(float x)
@@ -337,6 +338,7 @@ enum class SkeletonDocumentEditMode
 {
     Add = 0,
     Select,
+    Mark,
     Paint,
     Drag,
     ZoomIn,
@@ -380,10 +382,12 @@ public:
     virtual bool isEdgeEditable(QUuid edgeId) const = 0;
     virtual bool isNodeDeactivated(QUuid nodeId) const
     {
+        (void) nodeId;
         return false;
     };
     virtual bool isEdgeDeactivated(QUuid edgeId) const
     {
+        (void) edgeId;
         return false;
     };
     virtual void copyNodes(std::set<QUuid> nodeIdSet) const = 0;
@@ -402,6 +406,7 @@ public:
     }
     float getOriginZ(bool rotated=false) const
     {
+        (void) rotated;
         return m_originZ;
     }
     void setOriginX(float originX)

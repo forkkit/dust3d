@@ -82,7 +82,7 @@ float radianBetweenVectors(const QVector3D &first, const QVector3D &second)
     return std::acos(QVector3D::dotProduct(first.normalized(), second.normalized()));
 };
 
-float angleBetweenVectors(const QVector3D &first, const QVector3D &second)
+float degreesBetweenVectors(const QVector3D &first, const QVector3D &second)
 {
     return radianBetweenVectors(first, second) * 180.0 / M_PI;
 }
@@ -160,9 +160,9 @@ void angleSmooth(const std::vector<QVector3D> &vertices,
         const auto &v2 = vertices[sourceTriangle[1]];
         const auto &v3 = vertices[sourceTriangle[2]];
         float area = areaOfTriangle(v1, v2, v3);
-        float angles[] = {angleBetweenVectors(v2-v1, v3-v1),
-            angleBetweenVectors(v1-v2, v3-v2),
-            angleBetweenVectors(v1-v3, v2-v3)};
+        float angles[] = {degreesBetweenVectors(v2-v1, v3-v1),
+            degreesBetweenVectors(v1-v2, v3-v2),
+            degreesBetweenVectors(v1-v3, v2-v3)};
         for (int i = 0; i < 3; ++i) {
             if (sourceTriangle[i] >= vertices.size()) {
                 qDebug() << "Invalid vertex index" << sourceTriangle[i] << "vertices size" << vertices.size();
@@ -183,7 +183,7 @@ void angleSmooth(const std::vector<QVector3D> &vertices,
                 float degrees = 0;
                 auto findDegreesResult = degreesBetweenFacesMap.find({triangleVertex.first, otherTriangleVertex.first});
                 if (findDegreesResult == degreesBetweenFacesMap.end()) {
-                    degrees = angleBetweenVectors(triangleNormals[triangleVertex.first], triangleNormals[otherTriangleVertex.first]);
+                    degrees = degreesBetweenVectors(triangleNormals[triangleVertex.first], triangleNormals[otherTriangleVertex.first]);
                     degreesBetweenFacesMap.insert({{triangleVertex.first, otherTriangleVertex.first}, degrees});
                     degreesBetweenFacesMap.insert({{otherTriangleVertex.first, triangleVertex.first}, degrees});
                 } else {
@@ -463,4 +463,21 @@ void subdivideFace2D(std::vector<QVector2D> *face)
         (*face)[n++] = oldFace[h] * 0.125 + oldFace[i] * 0.75 + oldFace[j] * 0.125;
         (*face)[n++] = (oldFace[i] + oldFace[j]) * 0.5;
     }
+}
+
+QVector3D choosenBaseAxis(const QVector3D &layoutDirection)
+{
+    const std::vector<QVector3D> axisList = {
+        QVector3D(1, 0, 0),
+        QVector3D(0, 1, 0),
+        QVector3D(0, 0, 1),
+    };
+    std::vector<std::pair<float, size_t>> dots;
+    for (size_t i = 0; i < axisList.size(); ++i) {
+        dots.push_back(std::make_pair(qAbs(QVector3D::dotProduct(layoutDirection, axisList[i])), i));
+    }
+    return axisList[std::min_element(dots.begin(), dots.end(), [](const std::pair<float, size_t> &first,
+            const std::pair<float, size_t> &second) {
+        return first.first < second.first;
+    })->second];
 }

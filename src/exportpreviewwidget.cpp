@@ -36,6 +36,7 @@ ExportPreviewWidget::ExportPreviewWidget(Document *document, QWidget *parent) :
     //QPushButton *regenerateButton = new QPushButton(QChar(fa::recycle));
     //initAwesomeButton(regenerateButton);
     QPushButton *regenerateButton = new QPushButton(tr("Regenerate"));
+    regenerateButton->hide();
     connect(this, &ExportPreviewWidget::regenerate, this, &ExportPreviewWidget::checkSpinner);
     connect(regenerateButton, &QPushButton::clicked, this, &ExportPreviewWidget::regenerate);
     
@@ -48,8 +49,10 @@ ExportPreviewWidget::ExportPreviewWidget(Document *document, QWidget *parent) :
     connect(m_saveButton, &QPushButton::clicked, this, [=]() {
         auto currentIndex = exportFormatSelectBox->currentIndex();
         if (0 == currentIndex) {
+            this->hide();
             emit saveAsGlb();
         } else if (1 == currentIndex) {
+            this->hide();
             emit saveAsFbx();
         }
     });

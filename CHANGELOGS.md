@@ -1,3 +1,29 @@
+Changes between 1.0.0-rc.1 and 1.0.0-rc.3:
+--------------------------------------------------
+- Fix negative skinning weight  
+- Fix IBL shader  
+- Add win32 release  
+
+Changes between 1.0.0-beta.29 and 1.0.0-rc.1:
+--------------------------------------------------
+- Add shortcuts for menu items  
+- Preserve window size between runs  
+- Drop win32 support  
+- Add win64 support  
+- Add remesh by integrating Instant-Meshes  
+- Add cloth simulation by integrating FastMassSpring  
+- New rig generator  
+- Add Spanish and Italian language  
+- Fix glb exporting alpha mode setting  
+- Add texture size preference setting  
+- Add example model: Cat  
+
+Changes between 1.0.0-beta.28 and 1.0.0-beta.29:
+--------------------------------------------------
+- Add marker pen: A new way of modeling from contour  
+- Fix crash when nodes are extremely small  
+- Fix shader for core profile  
+
 Changes between 1.0.0-beta.27 and 1.0.0-beta.28:
 --------------------------------------------------
 - Add new generated mesh type: Grid mesh  

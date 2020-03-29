@@ -14361,7 +14361,7 @@ static JSValue js_call_c_function(JSContext *ctx, JSValueConst func_obj,
 #else
     sf->js_mode = 0;
 #endif
-    sf->cur_func = (JSValue)func_obj;
+    sf->cur_func = CastToJSValue(func_obj);
     sf->arg_count = argc;
     arg_buf = argv;
 
@@ -14622,7 +14622,7 @@ static JSValue JS_CallInternal(JSContext *ctx, JSValueConst func_obj,
     sf->js_mode = b->js_mode;
     arg_buf = argv;
     sf->arg_count = argc;
-    sf->cur_func = (JSValue)func_obj;
+    sf->cur_func = CastToJSValue(func_obj);
     init_list_head(&sf->var_ref_list);
     var_refs = p->u.func.var_refs;
 
@@ -34797,8 +34797,8 @@ static int64_t JS_FlattenIntoArray(JSContext *ctx, JSValueConst target,
         if (!JS_IsUndefined(mapperFunction)) {
             JSValueConst args[3] = { element, JS_NewInt64(ctx, sourceIndex), source };
             element = JS_Call(ctx, mapperFunction, thisArg, 3, args);
-            JS_FreeValue(ctx, (JSValue)args[0]);
-            JS_FreeValue(ctx, (JSValue)args[1]);
+            JS_FreeValue(ctx, CastToJSValue(args[0]));
+            JS_FreeValue(ctx, CastToJSValue(args[1]));
             if (JS_IsException(element))
                 return -1;
         }
@@ -40305,7 +40305,7 @@ static JSValueConst js_proxy_getPrototypeOf(JSContext *ctx, JSValueConst obj)
     }
     /* store the prototype in the proxy so that its refcount is at least 1 */
     set_value(ctx, &s->proto, ret);
-    return (JSValueConst)ret;
+    return CastToJSValueConst(ret);
 }
 
 static int js_proxy_setPrototypeOf(JSContext *ctx, JSValueConst obj,
@@ -41504,7 +41504,7 @@ static JSMapRecord *map_add_record(JSContext *ctx, JSMapState *s,
     } else {
         JS_DupValue(ctx, key);
     }
-    mr->key = (JSValue)key;
+    mr->key = CastToJSValue(key);
     h = map_hash_key(ctx, key) & (s->hash_size - 1);
     list_add_tail(&mr->hash_link, &s->hash_table[h]);
     list_add_tail(&mr->link, &s->records);
@@ -41716,7 +41716,7 @@ static JSValue js_map_forEach(JSContext *ctx, JSValueConst this_val,
                 args[0] = args[1];
             else
                 args[0] = JS_DupValue(ctx, mr->value);
-            args[2] = (JSValue)this_val;
+            args[2] = CastToJSValue(this_val);
             ret = JS_Call(ctx, func, this_arg, 3, (JSValueConst *)args);
             JS_FreeValue(ctx, args[0]);
             if (!magic)
@@ -42628,7 +42628,7 @@ static JSValue js_promise_all(JSContext *ctx, JSValueConst this_val,
                 goto fail_reject;
             }
             resolve_element_data[0] = JS_NewBool(ctx, FALSE);
-            resolve_element_data[1] = (JSValueConst)JS_NewInt32(ctx, index);
+            resolve_element_data[1] = CastToJSValueConst(JS_NewInt32(ctx, index));
             resolve_element_data[2] = values;
             resolve_element_data[3] = resolving_funcs[0];
             resolve_element_data[4] = resolve_element_env;
@@ -42956,7 +42956,7 @@ static JSValue js_async_from_async_iterator_unwrap_func_create(JSContext *ctx,
     JSValueConst func_data[2];
 
     func_data[0] = value;
-    func_data[1] = (JSValueConst)JS_NewBool(ctx, done);
+    func_data[1] = CastToJSValueConst(JS_NewBool(ctx, done));
     return JS_NewCFunctionData(ctx, js_async_from_async_iterator_unwrap,
                                0, 0, 2, func_data);
 }
@@ -46998,8 +46998,8 @@ static int js_TA_cmp_generic(const void *a, const void *b, void *opaque) {
             else
                 cmp = (val > 0) - (val < 0);
         }
-        JS_FreeValue(ctx, (JSValue)argv[0]);
-        JS_FreeValue(ctx, (JSValue)argv[1]);
+        JS_FreeValue(ctx, CastToJSValue(argv[0]));
+        JS_FreeValue(ctx, CastToJSValue(argv[1]));
     }
     return cmp;
 }

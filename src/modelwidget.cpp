@@ -4,6 +4,7 @@
 #include <QGuiApplication>
 #include <math.h>
 #include <QVector4D>
+#include <QSurfaceFormat>
 #include "modelwidget.h"
 #include "util.h"
 
@@ -14,11 +15,15 @@ const QVector3D ModelWidget::m_cameraPosition = QVector3D(0, 0, -4.0);
 float ModelWidget::m_minZoomRatio = 5.0;
 float ModelWidget::m_maxZoomRatio = 80.0;
 
+int ModelWidget::m_defaultXRotation = 30 * 16;
+int ModelWidget::m_defaultYRotation = -45 * 16;
+int ModelWidget::m_defaultZRotation = 0;
+
 ModelWidget::ModelWidget(QWidget *parent) :
     QOpenGLWidget(parent),
-    m_xRot(30 * 16),
-    m_yRot(-45 * 16),
-    m_zRot(0),
+    m_xRot(m_defaultXRotation),
+    m_yRot(m_defaultYRotation),
+    m_zRot(m_defaultZRotation),
     m_program(nullptr),
     m_moveStarted(false),
     m_moveEnabled(true),
@@ -122,8 +127,16 @@ void ModelWidget::initializeGL()
         QColor bgcolor = QWidget::palette().color(QWidget::backgroundRole());
         glClearColor(bgcolor.redF(), bgcolor.greenF(), bgcolor.blueF(), 1);
     }
-
-    m_program = new ModelShaderProgram;
+    
+    bool isCoreProfile = false;
+    const char *versionString = (const char *)glGetString(GL_VERSION);
+    if (nullptr != versionString &&
+            '\0' != versionString[0] &&
+            0 == strstr(versionString, "Mesa")) {
+        isCoreProfile = QSurfaceFormat::defaultFormat().profile() == QSurfaceFormat::CoreProfile;
+    }
+        
+    m_program = new ModelShaderProgram(isCoreProfile);
     
     // Create a vertex array object. In OpenGL ES 2.0 and OpenGL 2.x
     // implementations this is optional and support may not be present
@@ -209,6 +222,28 @@ void ModelWidget::toggleWireframe()
     else
         m_meshBinder.showWireframes();
     update();
+}
+
+void ModelWidget::enableEnvironmentLight()
+{
+    m_meshBinder.enableEnvironmentLight();
+    update();
+}
+
+void ModelWidget::toggleRotation()
+{
+    if (nullptr != m_rotationTimer) {
+        delete m_rotationTimer;
+        m_rotationTimer = nullptr;
+    } else {
+        m_rotationTimer = new QTimer(this);
+        m_rotationTimer->setInterval(42);
+        m_rotationTimer->setSingleShot(false);
+        connect(m_rotationTimer, &QTimer::timeout, this, [&]() {
+            setYRotation(m_yRot - 8);
+        });
+        m_rotationTimer->start();
+    }
 }
 
 void ModelWidget::toggleUvCheck()
